@@ -1,0 +1,14 @@
+#!/bin/bash
+# COBOL AI CLI Wrapper Script
+# Automatically loads environment variables and runs the CLI
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Load environment variables from .env file
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    export $(cat "$SCRIPT_DIR/.env" | grep -v '^#' | xargs)
+fi
+
+# Run the CLI with all arguments
+exec "$SCRIPT_DIR/bin/cobol-ai-cli" "$@"

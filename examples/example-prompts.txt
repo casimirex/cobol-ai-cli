@@ -1,0 +1,32 @@
+# COBOL AI CLI - Example Prompts
+# Use these prompts to test the CLI
+
+# Simple arithmetic
+What is 2 + 2?
+
+# General knowledge
+What is the capital of France?
+
+# Code assistance
+Write a simple COBOL program that prints "Hello World"
+
+# Explanation requests
+Explain what COBOL is and its history
+
+# Technical questions
+What is the difference between COMP and COMP-3 in COBOL?
+
+# Data processing
+How do I read a sequential file in COBOL?
+
+# Best practices
+What are COBOL coding best practices?
+
+# Debugging
+How do I debug a COBOL program?
+
+# Legacy system questions
+How can I modernize a COBOL application?
+
+# Integration questions
+How do I call an external API from COBOL?

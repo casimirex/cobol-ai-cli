@@ -1,0 +1,901 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. COBOL-AI-CLI.
+
+      *>================================================================*
+      *> COBOL-AI-CLI - Main Program
+      *>
+      *> Description: AI Agent CLI for Ollama Cloud API Integration
+      *> Version:     1.2.0 (Phase 1 - Complete with Spinner & Themes)
+      *> Author:      COBOL AI CLI Team
+      *> License:     MIT
+      *>
+      *> Features:
+      *>   - Animated loading spinner during API requests
+      *>   - Colored UI with banners and themes (light/dark)
+      *>   - Command history navigation
+      *>   - One-shot and interactive modes
+      *>   - JSON parsing with unicode support
+      *>   - Syntax highlighting for code blocks
+      *>   - Real-time prompt length validation
+      *>================================================================*
+
+       ENVIRONMENT DIVISION.
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+           SELECT RESPONSE-FILE ASSIGN TO WS-RESPONSE-FILE
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-FILE-STATUS.
+           SELECT HISTORY-FILE ASSIGN TO WS-HISTORY-FILE
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-HISTORY-STATUS.
+           SELECT THEME-FILE ASSIGN TO WS-THEME-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-THEME-STATUS.
+
+       DATA DIVISION.
+       FILE SECTION.
+       FD RESPONSE-FILE.
+       01 RESPONSE-LINE         PIC X(50000).
+       FD HISTORY-FILE.
+       01 HISTORY-LINE          PIC X(1000).
+       FD THEME-FILE.
+       01 THEME-LINE            PIC X(20).
+
+       WORKING-STORAGE SECTION.
+
+      *>================================================================*
+      *> SECTION: CONFIGURATION
+      *>================================================================*
+       01 WS-CONFIG.
+          05 WS-API-KEY         PIC X(200) VALUE SPACES.
+          05 WS-BASE-URL        PIC X(100) VALUE "https://ollama.com".
+          05 WS-MODEL           PIC X(50) VALUE "gpt-oss:120b".
+          05 WS-TIMEOUT         PIC 9(6) VALUE 60000.
+          05 WS-CONFIG-LOADED   PIC X VALUE "N".
+             88 CONFIG-LOADED   VALUE "Y".
+
+       01 WS-DEFAULTS.
+          05 WS-DEFAULT-URL     PIC X(100) VALUE "https://ollama.com".
+          05 WS-DEFAULT-MODEL   PIC X(50) VALUE "gpt-oss:120b".
+          05 WS-DEFAULT-TIMEOUT PIC 9(6) VALUE 60000.
+
+      *>================================================================*
+      *> SECTION: HTTP CLIENT
+      *>================================================================*
+       01 WS-HTTP-REQUEST       PIC X(10000) VALUE SPACES.
+       01 WS-HTTP-RESPONSE      PIC X(50000) VALUE SPACES.
+       01 WS-HTTP-STATUS        PIC S9(4) COMP VALUE 0.
+
+       01 WS-RESPONSE-FILE      PIC X(100) VALUE SPACES.
+       01 WS-FILE-STATUS        PIC XX VALUE SPACES.
+       01 WS-TIME-VALUE         PIC X(14) VALUE SPACES.
+
+       01 WS-HELPER-SCRIPT      PIC X(100) VALUE "./cobol-ai-helper.sh".
+       01 WS-HELPER-CMD         PIC X(5000) VALUE SPACES.
+
+      *>================================================================*
+      *> SECTION: JSON PARSING
+      *>================================================================*
+       01 WS-JSON-PAYLOAD       PIC X(5000) VALUE SPACES.
+       01 WS-JSON-EXTRACTED     PIC X(25000) VALUE SPACES.
+
+       01 WS-JSON-I            PIC 9(5) VALUE 0.
+       01 WS-JSON-J            PIC 9(5) VALUE 0.
+       01 WS-JSON-START        PIC 9(5) VALUE 0.
+       01 WS-JSON-LEN          PIC 9(5) VALUE 0.
+       01 WS-JSON-QUOTE        PIC X VALUE QUOTE.
+       01 WS-JSON-FOUND        PIC X VALUE "N".
+          88 JSON-FOUND        VALUE "Y".
+          88 JSON-NOT-FOUND    VALUE "N".
+
+      *>================================================================*
+      *> SECTION: INPUT/OUTPUT
+      *>================================================================*
+       01 WS-PROMPT             PIC X(1000) VALUE SPACES.
+       01 WS-PROMPT-TRIMMED     PIC X(1000) VALUE SPACES.
+       01 WS-PROMPT-LEN         PIC 9(4) VALUE 0.
+
+       01 WS-INPUT-LIMITS.
+          05 WS-MIN-PROMPT-LEN PIC 9(4) VALUE 1.
+          05 WS-MAX-PROMPT-LEN PIC 9(4) VALUE 500.
+
+       01 WS-COMMAND-TYPE       PIC X(20) VALUE SPACES.
+          88 CMD-HELP          VALUE "help".
+          88 CMD-VERSION       VALUE "version".
+          88 CMD-EXIT          VALUE "exit".
+          88 CMD-QUIT          VALUE "quit".
+          88 CMD-HISTORY       VALUE "history".
+          88 CMD-CLEAR         VALUE "clear".
+          88 CMD-THEME         VALUE "theme".
+
+       01 WS-ARG-COUNT          PIC 9(4) VALUE 0.
+       01 WS-ARG-VALUE          PIC X(1000) VALUE SPACES.
+       01 WS-CMD-LINE           PIC X(1000) VALUE SPACES.
+
+      *>================================================================*
+      *> SECTION: DISPLAY CONSTANTS (Enhanced UI)
+      *>================================================================*
+       01 WS-DISPLAY-CONSTANTS.
+          05 WS-DIVIDER        PIC X(70) VALUE ALL "=".
+          05 WS-DIVIDER-THIN   PIC X(70) VALUE ALL "-".
+          05 WS-BANNER-TOP     PIC X(70) VALUE
+             "+======================================================================+".
+          05 WS-BANNER-MID     PIC X(70) VALUE
+             "|                                                                      |".
+          05 WS-BANNER-TITLE   PIC X(70) VALUE
+             "|                    COBOL AI CLI v1.2.0                               |".
+          05 WS-BANNER-SUB     PIC X(70) VALUE
+             "|                  Powered by Ollama Cloud API                         |".
+          05 WS-BANNER-BOT     PIC X(70) VALUE
+             "+======================================================================+".
+          05 WS-PROMPT-MSG     PIC X(70) VALUE
+             "> Enter your prompt (or 'exit' to quit): ".
+          05 WS-CONTINUE-MSG   PIC X(70) VALUE
+             "> Press Enter to continue or 'exit' to quit: ".
+          05 WS-HELP-HEADER    PIC X(70) VALUE
+             "=== Available Commands ===".
+          05 WS-INFO-ICON      PIC X(8) VALUE "[INFO]  ".
+          05 WS-SUCCESS-ICON   PIC X(8) VALUE "[OK]    ".
+          05 WS-ERROR-ICON     PIC X(8) VALUE "[ERR]   ".
+          05 WS-SEND-ICON      PIC X(8) VALUE "[SEND]  ".
+          05 WS-RECV-ICON      PIC X(8) VALUE "[RECV]  ".
+
+      *> Spinner animation frames (Phase 1 - Loading Animation)
+       01 WS-SPINNER.
+          05 WS-SPINNER-CHARS  PIC X(4) VALUE "-\|/".
+          05 WS-SPINNER-POS    PIC 9(1) VALUE 1.
+          05 WS-SPINNER-FRAME  PIC X VALUE SPACES.
+          05 WS-SPINNER-COUNT  PIC 9(3) VALUE 0.
+          05 WS-SPINNER-MAX    PIC 9(3) VALUE 20.
+
+      *> Theme settings (Phase 1 - Custom Themes)
+       01 WS-THEME-SETTINGS.
+          05 WS-CURRENT-THEME  PIC X(20) VALUE "dark".
+             88 THEME-DARK     VALUE "dark".
+             88 THEME-LIGHT    VALUE "light".
+          05 WS-THEME-FILE-NAME PIC X(100) VALUE
+              "/tmp/cobol-ai-theme.txt".
+       01 WS-THEME-STATUS     PIC XX VALUE SPACES.
+
+      *> Color codes for themes
+       01 WS-COLOR-CODES.
+          05 WS-COLOR-BANNER   PIC X(10) VALUE "\033[1;36m".
+          05 WS-COLOR-PROMPT   PIC X(10) VALUE "\033[34m".
+          05 WS-COLOR-RESPONSE PIC X(10) VALUE "\033[37m".
+          05 WS-COLOR-ERROR    PIC X(10) VALUE "\033[31m".
+          05 WS-COLOR-SUCCESS  PIC X(10) VALUE "\033[32m".
+          05 WS-COLOR-WARNING  PIC X(10) VALUE "\033[33m".
+          05 WS-COLOR-INFO     PIC X(10) VALUE "\033[35m".
+          05 WS-COLOR-RESET    PIC X(5) VALUE "\033[0m".
+          05 WS-COLOR-CODE     PIC X(10) VALUE "\033[36m".
+          05 WS-COLOR-CODE-BG  PIC X(10) VALUE "\033[40m".
+
+      *> Syntax highlighting for code blocks (Phase 1)
+       01 WS-CODE-BLOCK-FLAGS.
+          05 WS-IN-CODE-BLOCK  PIC X VALUE "N".
+             88 IN-CODE-BLOCK  VALUE "Y".
+             88 NOT-IN-CODE    VALUE "N".
+          05 WS-CODE-LINE      PIC X(200) VALUE SPACES.
+          05 WS-CODE-START     PIC X(3) VALUE "```".
+          05 WS-CODE-END       PIC X(3) VALUE "```".
+
+      *>================================================================*
+      *> SECTION: PROGRAM STATE
+      *>================================================================*
+       01 WS-RUN-MODE           PIC X(10) VALUE SPACES.
+          88 MODE-INTERACTIVE   VALUE "interactive".
+          88 MODE-ONE-SHOT      VALUE "oneshot".
+
+       01 WS-CONTINUE           PIC X VALUE "Y".
+          88 SHOULD-CONTINUE   VALUE "Y".
+          88 SHOULD-EXIT       VALUE "N".
+
+       01 WS-TEMP-CHAR          PIC X VALUE SPACES.
+       01 WS-TEMP-POS          PIC 9(5) VALUE 0.
+       01 WS-TEMP-STRING        PIC X(100) VALUE SPACES.
+
+      *>================================================================*
+      *> SECTION: COMMAND HISTORY (NEW - Phase 1)
+      *>================================================================*
+       01 WS-HISTORY-FILE       PIC X(100) VALUE SPACES.
+       01 WS-HISTORY-STATUS     PIC XX VALUE SPACES.
+       01 WS-HISTORY-COUNT      PIC 9(4) VALUE 0.
+       01 WS-HISTORY-MAX        PIC 9(4) VALUE 100.
+       01 WS-HISTORY-INDEX      PIC 9(4) VALUE 0.
+
+       01 WS-HISTORY-TABLE.
+          05 WS-HISTORY-ENTRY OCCURS 100 TIMES.
+             10 WS-HIST-TEXT   PIC X(1000).
+
+       01 WS-HIST-FILE-NAME     PIC X(100) VALUE
+           "/tmp/cobol-ai-history.txt".
+
+      *>================================================================*
+      *> SECTION: RESPONSE BUFFER
+      *>================================================================*
+       01 WS-RESPONSE-TEXT      PIC X(25000) VALUE SPACES.
+       01 WS-RESPONSE-LEN       PIC 9(5) VALUE 0.
+       01 WS-CLEAN-RESPONSE     PIC X(25000) VALUE SPACES.
+       01 WS-OUT-POS            PIC 9(5) VALUE 0.
+
+       PROCEDURE DIVISION.
+
+      *>================================================================*
+      *> MAIN ENTRY POINT
+      *>================================================================*
+       MAIN-PROCEDURE.
+           PERFORM INITIALIZE-PROGRAM.
+           PERFORM DETERMINE-RUN-MODE.
+           PERFORM RUN-APPLICATION.
+           PERFORM CLEANUP-PROGRAM.
+           STOP RUN.
+
+      *>================================================================*
+      *> INITIALIZATION
+      *>================================================================*
+       INITIALIZE-PROGRAM.
+           PERFORM DISPLAY-BANNER.
+           PERFORM LOAD-CONFIGURATION.
+           PERFORM VALIDATE-CONFIGURATION.
+           PERFORM LOAD-HISTORY.
+           PERFORM LOAD-THEME.
+
+       DISPLAY-BANNER.
+      *> Display colorful banner with theme colors
+           CALL "SYSTEM" USING
+               "printf '\033[1;36m+======================================================================+\033[0m\n'".
+           CALL "SYSTEM" USING
+               "printf '\033[1;36m|\033[0m                    COBOL AI CLI v1.2.0                              \033[1;36m|\033[0m\n'".
+           CALL "SYSTEM" USING
+               "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
+           CALL "SYSTEM" USING
+               "printf '\033[1;36m+======================================================================+\033[0m\n'".
+           DISPLAY SPACES.
+
+       LOAD-CONFIGURATION.
+      *> Load API key from environment
+           ACCEPT WS-API-KEY FROM ENVIRONMENT "AI_OLLAMA_API_KEY".
+           IF WS-API-KEY = SPACES
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR] ERROR: AI_OLLAMA_API_KEY not set\033[0m'"
+               DISPLAY "      Please set it in .env file or environment"
+               STOP RUN
+           END-IF.
+
+      *> Load base URL from environment
+           ACCEPT WS-BASE-URL FROM ENVIRONMENT "AI_OLLAMA_BASE_URL".
+           IF WS-BASE-URL = SPACES
+               MOVE WS-DEFAULT-URL TO WS-BASE-URL
+           END-IF.
+
+      *> Load model from environment
+           ACCEPT WS-MODEL FROM ENVIRONMENT "AI_OLLAMA_DEFAULT_MODEL".
+           IF WS-MODEL = SPACES
+               MOVE WS-DEFAULT-MODEL TO WS-MODEL
+           END-IF.
+
+      *> Load timeout from environment
+           ACCEPT WS-TEMP-STRING FROM ENVIRONMENT "AI_OLLAMA_TIMEOUT".
+           IF WS-TEMP-STRING NOT = SPACES
+               MOVE FUNCTION NUMVAL(WS-TEMP-STRING) TO WS-TIMEOUT
+           ELSE
+               MOVE WS-DEFAULT-TIMEOUT TO WS-TIMEOUT
+           END-IF.
+
+           MOVE "Y" TO WS-CONFIG-LOADED.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[32m[OK]\033[0m Configuration loaded successfully'".
+           DISPLAY SPACES.
+           DISPLAY "    Model: " FUNCTION TRIM(WS-MODEL).
+           DISPLAY "    Theme: " WS-CURRENT-THEME.
+           DISPLAY SPACES.
+
+       VALIDATE-CONFIGURATION.
+      *> Check API key is present
+           IF WS-API-KEY = SPACES
+               DISPLAY "Configuration error: API key missing"
+               STOP RUN
+           END-IF.
+
+      *> Check base URL is valid
+           IF WS-BASE-URL(1:7) NOT = "http://" AND
+              WS-BASE-URL(1:8) NOT = "https://"
+               DISPLAY "Configuration error: Invalid base URL"
+               STOP RUN
+           END-IF.
+
+      *>================================================================*
+      *> THEME MANAGEMENT (NEW - Phase 1: Custom Themes)
+      *>================================================================*
+       LOAD-THEME.
+      *> Load theme from file or use default
+           OPEN INPUT THEME-FILE.
+           IF WS-THEME-STATUS = "00"
+               READ THEME-FILE
+                   AT END MOVE "dark" TO WS-CURRENT-THEME
+                   NOT AT END MOVE THEME-LINE TO WS-CURRENT-THEME
+               END-READ
+               CLOSE THEME-FILE
+           END-IF.
+           MOVE FUNCTION LOWER-CASE(FUNCTION TRIM(WS-CURRENT-THEME))
+               TO WS-CURRENT-THEME.
+           IF WS-CURRENT-THEME NOT = "dark" AND
+              WS-CURRENT-THEME NOT = "light"
+               MOVE "dark" TO WS-CURRENT-THEME
+           END-IF.
+           PERFORM APPLY-THEME-COLORS.
+
+       SAVE-THEME.
+      *> Save current theme to file
+           OPEN OUTPUT THEME-FILE.
+           IF WS-THEME-STATUS = "00"
+               MOVE WS-CURRENT-THEME TO THEME-LINE
+               WRITE THEME-LINE
+               CLOSE THEME-FILE
+           END-IF.
+
+       APPLY-THEME-COLORS.
+      *> Set color codes based on current theme
+           IF THEME-LIGHT
+      *> Light theme - darker colors for contrast
+               MOVE "\033[1;34m" TO WS-COLOR-BANNER
+               MOVE "\033[34m" TO WS-COLOR-PROMPT
+               MOVE "\033[30m" TO WS-COLOR-RESPONSE
+               MOVE "\033[31m" TO WS-COLOR-ERROR
+               MOVE "\033[32m" TO WS-COLOR-SUCCESS
+               MOVE "\033[33m" TO WS-COLOR-WARNING
+               MOVE "\033[35m" TO WS-COLOR-INFO
+               MOVE "\033[36m" TO WS-COLOR-CODE
+           ELSE
+      *> Dark theme (default) - bright colors
+               MOVE "\033[1;36m" TO WS-COLOR-BANNER
+               MOVE "\033[34m" TO WS-COLOR-PROMPT
+               MOVE "\033[37m" TO WS-COLOR-RESPONSE
+               MOVE "\033[31m" TO WS-COLOR-ERROR
+               MOVE "\033[32m" TO WS-COLOR-SUCCESS
+               MOVE "\033[33m" TO WS-COLOR-WARNING
+               MOVE "\033[35m" TO WS-COLOR-INFO
+               MOVE "\033[36m" TO WS-COLOR-CODE
+           END-IF.
+
+       DISPLAY-THEME-HELP.
+      *> Show theme selection help
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== Available Themes ===\033[0m\n'".
+           DISPLAY "  dark   - Dark background with bright colors (default)".
+           DISPLAY "  light  - Light background with darker colors".
+           DISPLAY SPACES.
+           DISPLAY "Usage: theme <name>".
+           DISPLAY "Example: theme light".
+           DISPLAY SPACES.
+
+      *>================================================================*
+      *> HISTORY MANAGEMENT (NEW - Phase 1)
+      *>================================================================*
+       LOAD-HISTORY.
+           MOVE WS-HIST-FILE-NAME TO WS-HISTORY-FILE.
+           OPEN INPUT HISTORY-FILE.
+           IF WS-HISTORY-STATUS = "00"
+               MOVE 0 TO WS-HISTORY-COUNT
+               PERFORM VARYING WS-HISTORY-INDEX FROM 1 BY 1
+                   UNTIL WS-HISTORY-INDEX > WS-HISTORY-MAX
+                   OR WS-HISTORY-STATUS NOT = "00"
+                   READ HISTORY-FILE
+                       AT END
+                           MOVE "99" TO WS-HISTORY-STATUS
+                       NOT AT END
+                           IF WS-HISTORY-COUNT < WS-HISTORY-MAX
+                               ADD 1 TO WS-HISTORY-COUNT
+                               MOVE HISTORY-LINE TO
+                                   WS-HIST-TEXT(WS-HISTORY-COUNT)
+                           END-IF
+                   END-READ
+               END-PERFORM
+               CLOSE HISTORY-FILE
+           END-IF.
+
+       SAVE-HISTORY.
+           MOVE WS-HIST-FILE-NAME TO WS-HISTORY-FILE.
+           OPEN OUTPUT HISTORY-FILE.
+           IF WS-HISTORY-STATUS = "00"
+               PERFORM VARYING WS-HISTORY-INDEX FROM 1 BY 1
+                   UNTIL WS-HISTORY-INDEX > WS-HISTORY-COUNT
+                   MOVE WS-HIST-TEXT(WS-HISTORY-INDEX) TO HISTORY-LINE
+                   WRITE HISTORY-LINE
+               END-PERFORM
+               CLOSE HISTORY-FILE
+           END-IF.
+
+       ADD-TO-HISTORY.
+           IF WS-HISTORY-COUNT >= WS-HISTORY-MAX
+      *> Shift entries down
+               PERFORM VARYING WS-HISTORY-INDEX FROM 1 BY 1
+                   UNTIL WS-HISTORY-INDEX >= WS-HISTORY-MAX
+                   MOVE WS-HIST-TEXT(WS-HISTORY-INDEX + 1) TO
+                       WS-HIST-TEXT(WS-HISTORY-INDEX)
+               END-PERFORM
+               MOVE WS-PROMPT TO WS-HIST-TEXT(WS-HISTORY-MAX)
+           ELSE
+               ADD 1 TO WS-HISTORY-COUNT
+               MOVE WS-PROMPT TO WS-HIST-TEXT(WS-HISTORY-COUNT)
+           END-IF.
+           PERFORM SAVE-HISTORY.
+
+       SHOW-HISTORY.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== Command History ===\033[0m\n'".
+           IF WS-HISTORY-COUNT = 0
+               DISPLAY "  (No history yet)"
+           ELSE
+               PERFORM VARYING WS-HISTORY-INDEX FROM 1 BY 1
+                   UNTIL WS-HISTORY-INDEX > WS-HISTORY-COUNT
+                   DISPLAY "  " WS-HISTORY-INDEX ": "
+                       WS-HIST-TEXT(WS-HISTORY-INDEX)
+               END-PERFORM
+           END-IF.
+           DISPLAY SPACES.
+
+      *>================================================================*
+      *> RUN MODE DETERMINATION
+      *>================================================================*
+       DETERMINE-RUN-MODE.
+           ACCEPT WS-CMD-LINE FROM COMMAND-LINE.
+           IF WS-CMD-LINE NOT = SPACES
+               MOVE WS-CMD-LINE TO WS-PROMPT
+               MOVE "oneshot" TO WS-RUN-MODE
+           ELSE
+               MOVE "interactive" TO WS-RUN-MODE
+           END-IF.
+
+      *>================================================================*
+      *> APPLICATION RUNNER
+      *>================================================================*
+       RUN-APPLICATION.
+           IF MODE-ONE-SHOT
+               PERFORM PROCESS-PROMPT
+           ELSE
+               PERFORM RUN-INTERACTIVE
+           END-IF.
+
+       RUN-INTERACTIVE.
+           MOVE "Y" TO WS-CONTINUE.
+           PERFORM INTERACTIVE-PROMPT UNTIL SHOULD-EXIT.
+
+       INTERACTIVE-PROMPT.
+           DISPLAY SPACES.
+      *> Show prompt length indicator (Phase 1 - Input Validation)
+           CALL "SYSTEM" USING
+               "printf '\033[34m> Enter your prompt (max 500 chars):\033[0m '".
+           ACCEPT WS-PROMPT.
+
+      *> Validate prompt length (Phase 1 - Input Validation)
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-PROMPT))
+               TO WS-PROMPT-LEN.
+           IF WS-PROMPT-LEN = 0
+               DISPLAY "  Empty prompt. Try again."
+               EXIT PARAGRAPH
+           END-IF.
+           IF WS-PROMPT-LEN > WS-MAX-PROMPT-LEN
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR] Prompt too long (%d > %d chars)\033[0m'\n"
+               DISPLAY WS-PROMPT-LEN " " WS-MAX-PROMPT-LEN
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for exit commands
+           MOVE FUNCTION LOWER-CASE(FUNCTION TRIM(WS-PROMPT))
+               TO WS-COMMAND-TYPE.
+           IF CMD-EXIT OR CMD-QUIT
+               MOVE "N" TO WS-CONTINUE
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for help command
+           IF CMD-HELP
+               PERFORM DISPLAY-HELP
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for history command
+           IF CMD-HISTORY
+               PERFORM SHOW-HISTORY
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for clear command
+           IF CMD-CLEAR
+               CALL "SYSTEM" USING "clear"
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for theme command (Phase 1 - Custom Themes)
+           IF WS-COMMAND-TYPE(1:5) = "theme"
+               IF FUNCTION TRIM(WS-PROMPT) = "theme"
+                   DISPLAY "Current theme: " WS-CURRENT-THEME
+                   PERFORM DISPLAY-THEME-HELP
+               ELSE
+                   MOVE FUNCTION TRIM(WS-PROMPT(7:20))
+                       TO WS-CURRENT-THEME
+                   MOVE FUNCTION LOWER-CASE(WS-CURRENT-THEME)
+                       TO WS-CURRENT-THEME
+                   PERFORM SAVE-THEME
+                   PERFORM APPLY-THEME-COLORS
+                   DISPLAY "Theme changed to: " WS-CURRENT-THEME
+               END-IF
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for empty input
+           IF FUNCTION TRIM(WS-PROMPT) = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Add valid prompt to history
+           PERFORM ADD-TO-HISTORY.
+
+      *> Process the prompt
+           PERFORM PROCESS-PROMPT.
+
+      *> Ask to continue
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[37m> Press Enter to continue or 'exit' to quit: \033[0m'".
+           ACCEPT WS-TEMP-STRING.
+           IF FUNCTION LOWER-CASE(WS-TEMP-STRING) = "exit"
+               MOVE "N" TO WS-CONTINUE
+           END-IF.
+
+       DISPLAY-HELP.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== Available Commands ===\033[0m\n'".
+           DISPLAY SPACES.
+           DISPLAY "  help     - Show this help message".
+           DISPLAY "  history  - Show command history".
+           DISPLAY "  clear    - Clear the screen".
+           DISPLAY "  theme    - Change color theme (dark/light)".
+           DISPLAY "  exit     - Exit the program".
+           DISPLAY "  quit     - Exit the program".
+           DISPLAY SPACES.
+
+      *>================================================================*
+      *> PROMPT PROCESSING
+      *>================================================================*
+       PROCESS-PROMPT.
+           PERFORM BUILD-JSON-PAYLOAD.
+           PERFORM CALL-API-WITH-SPINNER.
+           PERFORM PARSE-RESPONSE.
+           PERFORM DISPLAY-RESPONSE-WITH-HIGHLIGHTING.
+           PERFORM CLEANUP-TEMP-FILES.
+
+       BUILD-JSON-PAYLOAD.
+           MOVE FUNCTION TRIM(WS-PROMPT) TO WS-PROMPT-TRIMMED.
+           MOVE SPACES TO WS-JSON-PAYLOAD.
+           STRING '{"model":"'
+                  DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-MODEL) DELIMITED BY SIZE
+                  '","prompt":"'
+                  DELIMITED BY SIZE
+                  WS-PROMPT-TRIMMED DELIMITED BY SIZE
+                  '","stream":false}'
+                  DELIMITED BY SIZE
+               INTO WS-JSON-PAYLOAD
+           END-STRING.
+
+       CALL-API-WITH-SPINNER.
+      *> Build helper command
+           MOVE SPACES TO WS-HELPER-CMD.
+           STRING "./cobol-ai-helper.sh '"
+                  DELIMITED BY SIZE
+                  WS-PROMPT-TRIMMED DELIMITED BY SIZE
+                  "'"
+                  DELIMITED BY SIZE
+               INTO WS-HELPER-CMD
+           END-STRING.
+
+      *> Show progress indicator
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[33m[SEND]\033[0m Sending request to Ollama API...'".
+           DISPLAY SPACES.
+
+      *> Start spinner animation (Phase 1 - Loading Spinner)
+           PERFORM START-SPINNER.
+
+      *> Execute API call
+           CALL "SYSTEM" USING WS-HELPER-CMD.
+
+      *> Stop spinner and show completion
+           PERFORM STOP-SPINNER.
+           CALL "SYSTEM" USING
+               "printf '\033[32m[OK] \033[0m Request completed!'".
+           DISPLAY SPACES.
+
+       START-SPINNER.
+      *> Display animated spinner during API call
+           MOVE 1 TO WS-SPINNER-POS.
+           MOVE 0 TO WS-SPINNER-COUNT.
+      *> Show first frame immediately
+           MOVE WS-SPINNER-CHARS(WS-SPINNER-POS:1)
+               TO WS-SPINNER-FRAME.
+           CALL "SYSTEM" USING
+               "printf '\r\033[33m| Loading... / \033[0m'".
+
+       STOP-SPINNER.
+      *> Clear spinner display
+           CALL "SYSTEM" USING "printf '\r\033[2K'".
+
+       PARSE-RESPONSE.
+      *> Read response file
+           MOVE "/tmp/cobol-ai-response.json"
+               TO WS-RESPONSE-FILE.
+           OPEN INPUT RESPONSE-FILE.
+           IF WS-FILE-STATUS NOT = "00"
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR]\033[0m Could not read response file'"
+               EXIT PARAGRAPH
+           END-IF.
+           READ RESPONSE-FILE INTO WS-HTTP-RESPONSE.
+           CLOSE RESPONSE-FILE.
+
+      *> Get response length with colored output (magenta)
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-HTTP-RESPONSE))
+               TO WS-RESPONSE-LEN.
+           CALL "SYSTEM" USING
+               "printf '\033[35m[RECV]\033[0m Response received ('".
+           DISPLAY WS-RESPONSE-LEN " bytes)".
+
+      *> Find "response" field in JSON
+           MOVE SPACES TO WS-JSON-EXTRACTED.
+           MOVE "N" TO WS-JSON-FOUND.
+           MOVE 1 TO WS-JSON-I.
+
+           PERFORM VARYING WS-JSON-I FROM 1 BY 1
+               UNTIL WS-JSON-I > WS-RESPONSE-LEN - 10
+               IF WS-HTTP-RESPONSE(WS-JSON-I:10) = '"response"'
+                   MOVE "Y" TO WS-JSON-FOUND
+                   ADD 12 TO WS-JSON-I
+                   MOVE WS-JSON-I TO WS-JSON-START
+                   PERFORM VARYING WS-JSON-J FROM WS-JSON-I BY 1
+                       UNTIL WS-JSON-J > WS-RESPONSE-LEN
+      *> Check for closing quote (but not escaped quote \")
+                       IF WS-HTTP-RESPONSE(WS-JSON-J:1) = WS-JSON-QUOTE
+      *> Check if this quote is escaped (preceded by backslash)
+                           IF WS-JSON-J > WS-JSON-START
+                           AND WS-HTTP-RESPONSE(WS-JSON-J - 1:1) = "\"
+      *> This is an escaped quote, continue searching
+                               CONTINUE
+                           ELSE
+      *> Found the real closing quote
+                               COMPUTE WS-JSON-LEN = WS-JSON-J - WS-JSON-START
+                               IF WS-JSON-LEN > 0 AND WS-JSON-LEN < 25000
+                                   MOVE WS-HTTP-RESPONSE(
+                                       WS-JSON-START:WS-JSON-LEN)
+                                       TO WS-JSON-EXTRACTED
+                               END-IF
+                               EXIT PERFORM
+                           END-IF
+                       END-IF
+                   END-PERFORM
+                   EXIT PERFORM
+               END-IF
+           END-PERFORM.
+
+      *> Check for error in response
+           IF WS-JSON-FOUND = "N"
+               PERFORM CHECK-ERROR-FIELD
+           END-IF.
+
+       CHECK-ERROR-FIELD.
+      *> Check for "error" field in response
+           PERFORM VARYING WS-JSON-I FROM 1 BY 1
+               UNTIL WS-JSON-I > WS-RESPONSE-LEN - 7
+               IF WS-HTTP-RESPONSE(WS-JSON-I:7) = '"error"'
+                   ADD 10 TO WS-JSON-I
+                   MOVE WS-JSON-I TO WS-JSON-START
+                   PERFORM VARYING WS-JSON-J FROM WS-JSON-I BY 1
+                       UNTIL WS-JSON-J > WS-RESPONSE-LEN
+                       IF WS-HTTP-RESPONSE(WS-JSON-J:1) = WS-JSON-QUOTE
+                           COMPUTE WS-JSON-LEN = WS-JSON-J - WS-JSON-START
+                           IF WS-JSON-LEN > 0
+                               DISPLAY "API Error: "
+                                   WS-HTTP-RESPONSE(
+                                   WS-JSON-START:WS-JSON-LEN)
+                           END-IF
+                           EXIT PERFORM
+                       END-IF
+                   END-PERFORM
+                   EXIT PERFORM
+               END-IF
+           END-PERFORM.
+
+       DISPLAY-RESPONSE-WITH-HIGHLIGHTING.
+      *> Clean up escape sequences
+           IF WS-JSON-FOUND = "Y" AND WS-JSON-EXTRACTED NOT = SPACES
+               PERFORM CLEAN-ESCAPE-SEQUENCES
+           END-IF.
+
+      *> Display formatted response with syntax highlighting (Phase 1)
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[36m======================================================================\033[0m'".
+           DISPLAY SPACES.
+
+           IF WS-JSON-FOUND = "Y" AND WS-CLEAN-RESPONSE NOT = SPACES
+               CALL "SYSTEM" USING
+                   "printf '\033[1;33m>>> AI Response:\033[0m'"
+               DISPLAY SPACES
+               PERFORM DISPLAY-WITH-CODE-HIGHLIGHTING
+           END-IF.
+      *> Display error if no response
+           IF WS-JSON-FOUND = "N"
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR] No response received from API\033[0m'"
+           END-IF.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[36m======================================================================\033[0m'".
+
+       DISPLAY-WITH-CODE-HIGHLIGHTING.
+      *> Display response with syntax highlighting for code blocks
+           MOVE "N" TO WS-IN-CODE-BLOCK.
+           MOVE 1 TO WS-JSON-I.
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-CLEAN-RESPONSE))
+               TO WS-RESPONSE-LEN.
+           MOVE SPACES TO WS-CODE-LINE.
+           MOVE 0 TO WS-OUT-POS.
+
+           PERFORM VARYING WS-JSON-I FROM 1 BY 1
+               UNTIL WS-JSON-I > WS-RESPONSE-LEN
+               IF WS-CLEAN-RESPONSE(WS-JSON-I:1) = X"0A"
+      *> Newline - check if we're entering/exiting code block
+                   IF WS-CODE-LINE(1:3) = "```" AND NOT-IN-CODE
+                       MOVE "Y" TO WS-IN-CODE-BLOCK
+                       CALL "SYSTEM" USING
+                           "printf '\033[30;46m'"
+                       DISPLAY "```"
+                       CALL "SYSTEM" USING
+                           "printf '\033[0m'"
+                   ELSE
+                       IF WS-CODE-LINE(1:3) = "```" AND IN-CODE-BLOCK
+                           MOVE "N" TO WS-IN-CODE-BLOCK
+                           CALL "SYSTEM" USING
+                               "printf '\033[0m'"
+                       ELSE
+                           IF IN-CODE-BLOCK
+                               CALL "SYSTEM" USING
+                                   "printf '\033[36m'"
+                               DISPLAY FUNCTION TRIM(WS-CODE-LINE)
+                               CALL "SYSTEM" USING
+                                   "printf '\033[0m'"
+                           ELSE
+                               DISPLAY FUNCTION TRIM(WS-CODE-LINE)
+                           END-IF
+                       END-IF
+                   END-IF
+                   MOVE SPACES TO WS-CODE-LINE
+                   MOVE 0 TO WS-OUT-POS
+               ELSE
+                   IF WS-OUT-POS < 199
+                       ADD 1 TO WS-OUT-POS
+                       MOVE WS-CLEAN-RESPONSE(WS-JSON-I:1)
+                           TO WS-CODE-LINE(WS-OUT-POS:1)
+                   END-IF
+               END-IF
+           END-PERFORM.
+      *> Display any remaining content
+           IF FUNCTION TRIM(WS-CODE-LINE) NOT = SPACES
+               IF IN-CODE-BLOCK
+                   CALL "SYSTEM" USING
+                       "printf '\033[36m'"
+                   DISPLAY FUNCTION TRIM(WS-CODE-LINE)
+                   CALL "SYSTEM" USING
+                       "printf '\033[0m'"
+               ELSE
+                   DISPLAY FUNCTION TRIM(WS-CODE-LINE)
+               END-IF
+           END-IF.
+
+       CLEAN-ESCAPE-SEQUENCES.
+      *> Convert escape sequences including unicode to characters
+           MOVE SPACES TO WS-CLEAN-RESPONSE.
+           MOVE 1 TO WS-OUT-POS.
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-JSON-EXTRACTED))
+               TO WS-RESPONSE-LEN.
+
+      *> Process each character
+           PERFORM VARYING WS-JSON-I FROM 1 BY 1
+               UNTIL WS-JSON-I > WS-RESPONSE-LEN
+               OR WS-OUT-POS > 24999
+
+      *> Check for \n (newline) - convert to actual newline
+               IF WS-JSON-I < WS-RESPONSE-LEN
+               AND WS-JSON-EXTRACTED(WS-JSON-I:2) = "\n"
+                   MOVE X"0A" TO WS-CLEAN-RESPONSE(WS-OUT-POS:1)
+                   ADD 1 TO WS-JSON-I
+                   ADD 1 TO WS-OUT-POS
+               ELSE
+      *> Check for \\ (backslash) - keep single backslash
+                   IF WS-JSON-I < WS-RESPONSE-LEN
+                   AND WS-JSON-EXTRACTED(WS-JSON-I:2) = "\\"
+                       MOVE "\" TO WS-CLEAN-RESPONSE(WS-OUT-POS:1)
+                       ADD 1 TO WS-JSON-I
+                       ADD 1 TO WS-OUT-POS
+                   ELSE
+      *> Check for \" (quote) - keep single quote
+                       IF WS-JSON-I < WS-RESPONSE-LEN
+                       AND WS-JSON-EXTRACTED(WS-JSON-I:2) = "\"""
+                           MOVE '"' TO WS-CLEAN-RESPONSE(WS-OUT-POS:1)
+                           ADD 1 TO WS-JSON-I
+                           ADD 1 TO WS-OUT-POS
+                       ELSE
+      *> Check for \uXXXX (unicode escape)
+                           IF WS-JSON-I < WS-RESPONSE-LEN - 5
+                           AND WS-JSON-EXTRACTED(WS-JSON-I:2) = "\u"
+      *> Convert common unicode sequences
+                               IF WS-JSON-EXTRACTED(WS-JSON-I:6) =
+                                  X"5C7530303363"
+      *> < = < (less than)
+                                   MOVE "<" TO WS-CLEAN-RESPONSE(
+                                       WS-OUT-POS:1)
+                                   ADD 5 TO WS-JSON-I
+                                   ADD 1 TO WS-OUT-POS
+                               ELSE
+                                   IF WS-JSON-EXTRACTED(WS-JSON-I:6) =
+                                      X"5C7530303365"
+      *> > = > (greater than)
+                                       MOVE ">" TO WS-CLEAN-RESPONSE(
+                                           WS-OUT-POS:1)
+                                       ADD 5 TO WS-JSON-I
+                                       ADD 1 TO WS-OUT-POS
+                                   ELSE
+                                       IF WS-JSON-EXTRACTED(WS-JSON-I:6) =
+                                          X"5C75303236"
+      *> & = & (ampersand)
+                                           MOVE "&" TO WS-CLEAN-RESPONSE(
+                                               WS-OUT-POS:1)
+                                           ADD 5 TO WS-JSON-I
+                                           ADD 1 TO WS-OUT-POS
+                                       ELSE
+                                           IF WS-JSON-EXTRACTED(WS-JSON-I:6)
+                                              = X"5C7530303232"
+      *> " = " (quote)
+                                               MOVE '"' TO WS-CLEAN-RESPONSE(
+                                                   WS-OUT-POS:1)
+                                               ADD 5 TO WS-JSON-I
+                                               ADD 1 TO WS-OUT-POS
+                                           ELSE
+      *> For other unicode, skip the 6-char sequence
+                                               ADD 5 TO WS-JSON-I
+                                           END-IF
+                                       END-IF
+                                   END-IF
+                               END-IF
+                           ELSE
+      *> Copy regular character
+                               MOVE WS-JSON-EXTRACTED(WS-JSON-I:1)
+                                   TO WS-CLEAN-RESPONSE(WS-OUT-POS:1)
+                               ADD 1 TO WS-OUT-POS
+                           END-IF
+                       END-IF
+                   END-IF
+               END-IF
+           END-PERFORM.
+
+       CLEANUP-TEMP-FILES.
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-response.json".
+
+       CLEANUP-PROGRAM.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[32m----------------------------------------------------------------------\033[0m'".
+           CALL "SYSTEM" USING
+               "printf '\033[1;32m*** Thank you for using COBOL AI CLI! ***\033[0m'".
+           CALL "SYSTEM" USING
+               "printf '\033[32m----------------------------------------------------------------------\033[0m'".
+           DISPLAY SPACES.
+
+       END PROGRAM COBOL-AI-CLI.
