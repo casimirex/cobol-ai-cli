@@ -28,33 +28,33 @@ A feature-rich, professional COBOL-based AI CLI tool with modern UX, advanced ca
 
 ---
 
-## Phase 2: Core Features (Priority: High)
+## Phase 2: Core Features (Priority: High) - ✅ COMPLETE (v1.3.0)
 
 ### 2.1 Conversation Management
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Session History** | Store and view conversation history | Medium |
-| **Export Conversations** | Save chats to TXT/JSON/MD files | Low |
-| **Load History** | Resume previous conversations | Medium |
-| **Conversation Search** | Search through past conversations | Medium |
-| **Multi-Session Support** | Named conversation sessions | High |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **Session History** | Store and view conversation history | Medium | ✅ Done |
+| **Export Conversations** | Save chats to TXT/JSON/MD files | Low | ✅ Done |
+| **Load History** | Resume previous conversations | Medium | Future |
+| **Conversation Search** | Search through past conversations | Medium | Future |
+| **Multi-Session Support** | Named conversation sessions | High | Future |
 
 ### 2.2 Prompt Enhancement
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Prompt Templates** | Pre-defined templates for common tasks | Low |
-| **System Prompts** | Custom system instructions | Medium |
-| **Prompt Chaining** | Chain multiple prompts together | High |
-| **Variables in Prompts** | Use {{variables}} in templates | Medium |
-| **Prompt Library** | Save and reuse custom prompts | Medium |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **Prompt Templates** | Pre-defined templates for common tasks | Low | Future |
+| **System Prompts** | Custom system instructions | Medium | Future |
+| **Prompt Chaining** | Chain multiple prompts together | High | Future |
+| **Variables in Prompts** | Use {{variables}} in templates | Medium | Future |
+| **Prompt Library** | Save and reuse custom prompts | Medium | Future |
 
 ### 2.3 Model Management
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Model Switching** | Switch between AI models mid-session | Low |
-| **Model Info** | Display model capabilities and limits | Low |
-| **Model Comparison** | Compare responses from different models | Medium |
-| **Custom Model Config** | Temperature, max tokens, etc. | Medium |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **Model Switching** | Switch between AI models mid-session | Low | ✅ Done |
+| **Model Info** | Display model capabilities and limits | Low | ✅ Done |
+| **Model Comparison** | Compare responses from different models | Medium | Future |
+| **Custom Model Config** | Temperature, max tokens, etc. | Medium | Future |
 
 ---
 
@@ -252,7 +252,14 @@ A feature-rich, professional COBOL-based AI CLI tool with modern UX, advanced ca
 
 ## Version History
 
-### v1.2.0 (Current) - Phase 1 Complete ✨
+### v1.3.0 (Current) - Phase 2 Complete ✨
+- ✅ Conversation history with timestamps
+- ✅ Export conversations to text file
+- ✅ Model switching mid-session
+- ✅ Model listing with descriptions
+- ✅ All Phase 2 core features complete
+
+### v1.2.0 - Phase 1 Complete ✨
 - ✅ Loading spinner animation during API requests
 - ✅ Syntax highlighting for code blocks
 - ✅ Custom themes (dark/light mode)

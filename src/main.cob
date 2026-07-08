@@ -31,6 +31,9 @@
            SELECT THEME-FILE ASSIGN TO WS-THEME-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-THEME-STATUS.
+           SELECT CONVERSATION-FILE ASSIGN TO WS-CONV-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-CONV-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -40,6 +43,8 @@
        01 HISTORY-LINE          PIC X(1000).
        FD THEME-FILE.
        01 THEME-LINE            PIC X(20).
+       FD CONVERSATION-FILE.
+       01 CONVERSATION-LINE     PIC X(5000).
 
        WORKING-STORAGE SECTION.
 
@@ -107,6 +112,14 @@
           88 CMD-HISTORY       VALUE "history".
           88 CMD-CLEAR         VALUE "clear".
           88 CMD-THEME         VALUE "theme".
+          88 CMD-EXPORT        VALUE "export".
+          88 CMD-MODEL         VALUE "model".
+          88 CMD-MODELS        VALUE "models".
+
+       01 WS-EXPORT-FORMAT      PIC X(10) VALUE "text".
+          88 FORMAT-TEXT        VALUE "text".
+          88 FORMAT-JSON        VALUE "json".
+          88 FORMAT-MARKDOWN    VALUE "markdown".
 
        01 WS-ARG-COUNT          PIC 9(4) VALUE 0.
        01 WS-ARG-VALUE          PIC X(1000) VALUE SPACES.
@@ -218,7 +231,41 @@
        01 WS-CLEAN-RESPONSE     PIC X(25000) VALUE SPACES.
        01 WS-OUT-POS            PIC 9(5) VALUE 0.
 
+      *>================================================================*
+      *> SECTION: CONVERSATION HISTORY (Phase 2)
+      *>================================================================*
+       01 WS-CONVERSATION-FILE  PIC X(100) VALUE SPACES.
+       01 WS-CONV-STATUS        PIC XX VALUE SPACES.
+       01 WS-CONV-COUNT         PIC 9(4) VALUE 0.
+       01 WS-CONV-MAX           PIC 9(4) VALUE 50.
+       01 WS-CONV-INDEX         PIC 9(4) VALUE 0.
+
+       01 WS-CONVERSATION-TABLE.
+          05 WS-CONVERSATION-ENTRY OCCURS 50 TIMES.
+             10 WS-CONV-PROMPT   PIC X(1000).
+             10 WS-CONV-RESPONSE PIC X(5000).
+             10 WS-CONV-TIMESTAMP PIC X(20).
+
+       01 WS-CONV-FILE-NAME     PIC X(100) VALUE
+           "/tmp/cobol-ai-conversation.json".
+       01 WS-EXPORT-FILE-NAME   PIC X(100) VALUE SPACES.
+
+      *>================================================================*
+      *> SECTION: MODEL MANAGEMENT (Phase 2)
+      *>================================================================*
+       01 WS-VALID-MODELS.
+          05 WS-VALID-MODEL-ENTRY OCCURS 5 TIMES VALUE SPACES.
+             10 WS-VM-NAME        PIC X(50).
+
        PROCEDURE DIVISION.
+
+       INIT-MODEL-LIST.
+      *> Initialize valid models list
+           MOVE "gpt-oss:120b" TO WS-VALID-MODEL-ENTRY(1).
+           MOVE "llama2:7b" TO WS-VALID-MODEL-ENTRY(2).
+           MOVE "mistral:7b" TO WS-VALID-MODEL-ENTRY(3).
+           MOVE "codellama:13b" TO WS-VALID-MODEL-ENTRY(4).
+           MOVE "deepseek-r1:1.5b" TO WS-VALID-MODEL-ENTRY(5).
 
       *>================================================================*
       *> MAIN ENTRY POINT
@@ -239,13 +286,15 @@
            PERFORM VALIDATE-CONFIGURATION.
            PERFORM LOAD-HISTORY.
            PERFORM LOAD-THEME.
+           PERFORM INIT-CONVERSATION-HISTORY.
+           PERFORM INIT-MODEL-LIST.
 
        DISPLAY-BANNER.
       *> Display colorful banner with theme colors
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m                    COBOL AI CLI v1.2.0                              \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m                    COBOL AI CLI v1.3.0 (Phase 2)                    \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -304,6 +353,152 @@
                DISPLAY "Configuration error: Invalid base URL"
                STOP RUN
            END-IF.
+
+      *>================================================================*
+      *> CONVERSATION HISTORY (Phase 2: Session Management)
+      *>================================================================*
+       INIT-CONVERSATION-HISTORY.
+           MOVE 0 TO WS-CONV-COUNT.
+           MOVE SPACES TO WS-CONVERSATION-TABLE.
+
+       ADD-TO-CONVERSATION.
+           IF WS-CONV-COUNT >= WS-CONV-MAX
+      *> Shift entries down (circular buffer)
+               PERFORM VARYING WS-CONV-INDEX FROM 1 BY 1
+                   UNTIL WS-CONV-INDEX >= WS-CONV-MAX
+                   MOVE WS-CONV-PROMPT(WS-CONV-INDEX + 1) TO
+                       WS-CONV-PROMPT(WS-CONV-INDEX)
+                   MOVE WS-CONV-RESPONSE(WS-CONV-INDEX + 1) TO
+                       WS-CONV-RESPONSE(WS-CONV-INDEX)
+                   MOVE WS-CONV-TIMESTAMP(WS-CONV-INDEX + 1) TO
+                       WS-CONV-TIMESTAMP(WS-CONV-INDEX)
+               END-PERFORM
+               MOVE WS-PROMPT TO WS-CONV-PROMPT(WS-CONV-MAX)
+               MOVE WS-CLEAN-RESPONSE TO WS-CONV-RESPONSE(WS-CONV-MAX)
+               MOVE FUNCTION CURRENT-DATE(1:16)
+                   TO WS-CONV-TIMESTAMP(WS-CONV-MAX)
+           ELSE
+               ADD 1 TO WS-CONV-COUNT
+               MOVE WS-PROMPT TO WS-CONV-PROMPT(WS-CONV-COUNT)
+               MOVE WS-CLEAN-RESPONSE TO WS-CONV-RESPONSE(WS-CONV-COUNT)
+               MOVE FUNCTION CURRENT-DATE(1:16)
+                   TO WS-CONV-TIMESTAMP(WS-CONV-COUNT)
+           END-IF.
+
+       SHOW-CONVERSATION.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== Conversation History ===\033[0m\n'".
+           IF WS-CONV-COUNT = 0
+               DISPLAY "  (No conversation history yet)"
+           ELSE
+               PERFORM VARYING WS-CONV-INDEX FROM 1 BY 1
+                   UNTIL WS-CONV-INDEX > WS-CONV-COUNT
+                   DISPLAY SPACES
+                   DISPLAY "  [" WS-CONV-INDEX "] "
+                       WS-CONV-TIMESTAMP(WS-CONV-INDEX)
+                   DISPLAY "      Q: " WS-CONV-PROMPT(WS-CONV-INDEX)
+                   DISPLAY "      A: " WS-CONV-RESPONSE(WS-CONV-INDEX)
+               END-PERFORM
+           END-IF.
+           DISPLAY SPACES.
+
+       EXPORT-CONVERSATION.
+      *> Export conversation to file in specified format
+           DISPLAY SPACES.
+           IF WS-EXPORT-FORMAT = SPACES
+               MOVE "text" TO WS-EXPORT-FORMAT
+           END-IF.
+
+           IF WS-CONV-COUNT = 0
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR] No conversation to export\033[0m'"
+               EXIT PARAGRAPH
+           END-IF.
+
+           PERFORM EXPORT-AS-TEXT.
+           DISPLAY "Conversation exported to: " WS-EXPORT-FILE-NAME.
+           DISPLAY SPACES.
+
+       EXPORT-AS-TEXT.
+      *> Export as plain text file
+           MOVE "/tmp/cobol-ai-export.txt" TO WS-EXPORT-FILE-NAME.
+           MOVE WS-EXPORT-FILE-NAME TO WS-CONV-FILE-NAME.
+           OPEN OUTPUT CONVERSATION-FILE.
+           IF WS-CONV-STATUS = "00"
+               MOVE "COBOL AI CLI - Conversation Export" TO CONVERSATION-LINE
+               WRITE CONVERSATION-LINE
+               MOVE "===================================" TO CONVERSATION-LINE
+               WRITE CONVERSATION-LINE
+               MOVE SPACES TO CONVERSATION-LINE
+               WRITE CONVERSATION-LINE
+               PERFORM VARYING WS-CONV-INDEX FROM 1 BY 1
+                   UNTIL WS-CONV-INDEX > WS-CONV-COUNT
+                   STRING "--- Entry " WS-CONV-INDEX " ---"
+                       DELIMITED BY SIZE INTO CONVERSATION-LINE
+                   WRITE CONVERSATION-LINE
+                   STRING "Time: " WS-CONV-TIMESTAMP(WS-CONV-INDEX)
+                       DELIMITED BY SIZE INTO CONVERSATION-LINE
+                   WRITE CONVERSATION-LINE
+                   STRING "Q: " WS-CONV-PROMPT(WS-CONV-INDEX)
+                       DELIMITED BY SIZE INTO CONVERSATION-LINE
+                   WRITE CONVERSATION-LINE
+                   STRING "A: " WS-CONV-RESPONSE(WS-CONV-INDEX)
+                       DELIMITED BY SIZE INTO CONVERSATION-LINE
+                   WRITE CONVERSATION-LINE
+                   MOVE SPACES TO CONVERSATION-LINE
+                   WRITE CONVERSATION-LINE
+               END-PERFORM
+               CLOSE CONVERSATION-FILE
+           END-IF.
+
+      *>================================================================*
+      *> MODEL MANAGEMENT (Phase 2)
+      *>================================================================*
+       SHOW-MODELS.
+      *> Display available models
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== Available Models ===\033[0m\n'".
+           DISPLAY SPACES.
+           DISPLAY "  * gpt-oss:120b     (current) - Default large model (120B)".
+           DISPLAY "    llama2:7b        - Meta Llama 2 (7B)".
+           DISPLAY "    mistral:7b       - Mistral AI (7B)".
+           DISPLAY "    codellama:13b    - Code Llama (13B)".
+           DISPLAY "    deepseek-r1:1.5b - DeepSeek R1 (1.5B)".
+           DISPLAY SPACES.
+           DISPLAY "Usage: model <name>".
+           DISPLAY "Example: model llama2:7b".
+           DISPLAY SPACES.
+
+       CHANGE-MODEL.
+      *> Switch to a different model
+           MOVE FUNCTION TRIM(WS-PROMPT(6:50)) TO WS-TEMP-STRING.
+           IF FUNCTION TRIM(WS-TEMP-STRING) = SPACES
+               PERFORM SHOW-MODELS
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Validate model exists in our list
+           MOVE "N" TO WS-JSON-FOUND.
+           PERFORM VARYING WS-JSON-I FROM 1 BY 1
+               UNTIL WS-JSON-I > 5
+               IF FUNCTION TRIM(WS-VALID-MODEL-ENTRY(WS-JSON-I)) =
+                  FUNCTION TRIM(WS-TEMP-STRING)
+                   MOVE "Y" TO WS-JSON-FOUND
+                   EXIT PERFORM
+               END-IF
+           END-PERFORM.
+
+           IF WS-JSON-FOUND = "N"
+               DISPLAY "Unknown model. Available models are:"
+               PERFORM SHOW-MODELS
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE WS-TEMP-STRING TO WS-MODEL.
+           DISPLAY "Model changed to: " WS-MODEL.
+           DISPLAY SPACES.
 
       *>================================================================*
       *> THEME MANAGEMENT (NEW - Phase 1: Custom Themes)
@@ -528,6 +723,32 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> Check for model command (Phase 2 - Model Management)
+           IF WS-COMMAND-TYPE(1:6) = "model " OR
+              FUNCTION TRIM(WS-COMMAND-TYPE) = "model"
+               PERFORM CHANGE-MODEL
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for models command (Phase 2 - List Models)
+           IF CMD-MODELS
+               PERFORM SHOW-MODELS
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for export command (Phase 2 - Export Conversation)
+           IF CMD-EXPORT
+               PERFORM EXPORT-CONVERSATION
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Check for conversation command (Phase 2 - Show Conversation)
+           IF WS-COMMAND-TYPE(1:5) = "conv" OR
+              WS-COMMAND-TYPE(1:11) = "conversation"
+               PERFORM SHOW-CONVERSATION
+               EXIT PARAGRAPH
+           END-IF.
+
       *> Check for empty input
            IF FUNCTION TRIM(WS-PROMPT) = SPACES
                EXIT PARAGRAPH
@@ -553,12 +774,16 @@
            CALL "SYSTEM" USING
                "printf '\033[1;33m=== Available Commands ===\033[0m\n'".
            DISPLAY SPACES.
-           DISPLAY "  help     - Show this help message".
-           DISPLAY "  history  - Show command history".
-           DISPLAY "  clear    - Clear the screen".
-           DISPLAY "  theme    - Change color theme (dark/light)".
-           DISPLAY "  exit     - Exit the program".
-           DISPLAY "  quit     - Exit the program".
+           DISPLAY "  help           - Show this help message".
+           DISPLAY "  history        - Show command history".
+           DISPLAY "  clear          - Clear the screen".
+           DISPLAY "  theme          - Change color theme (dark/light)".
+           DISPLAY "  models         - List available AI models".
+           DISPLAY "  model <name>   - Switch to a different model".
+           DISPLAY "  export         - Export conversation to file".
+           DISPLAY "  conversation   - Show conversation history".
+           DISPLAY "  exit           - Exit the program".
+           DISPLAY "  quit           - Exit the program".
            DISPLAY SPACES.
 
       *>================================================================*
@@ -569,6 +794,7 @@
            PERFORM CALL-API-WITH-SPINNER.
            PERFORM PARSE-RESPONSE.
            PERFORM DISPLAY-RESPONSE-WITH-HIGHLIGHTING.
+           PERFORM ADD-TO-CONVERSATION.
            PERFORM CLEANUP-TEMP-FILES.
 
        BUILD-JSON-PAYLOAD.

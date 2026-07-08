@@ -61,6 +61,14 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **Enhanced Colored UI** | Beautiful terminal colors for all output |
 | **Status Indicators** | Visual feedback with `[SEND]`, `[RECV]`, `[OK]`, `[ERR]` icons |
 
+### Phase 2 Features (v1.3.0) ✨ NEW
+| Feature | Description |
+|---------|-------------|
+| **Conversation History** | View full conversation with timestamps using `conversation` command |
+| **Export Conversations** | Export chats to text file with `export` command |
+| **Model Switching** | Switch between AI models mid-session with `model <name>` command |
+| **Model Listing** | See available models with `models` command |
+
 ### Core Features
 | Feature | Description |
 |---------|-------------|
