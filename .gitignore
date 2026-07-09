@@ -1,5 +1,7 @@
 # Environment files (contain secrets)
 .env
+DEVELOPMENT-PLAN.md
+roadmap.md
 
 # Build artifacts
 bin/

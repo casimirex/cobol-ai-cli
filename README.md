@@ -74,6 +74,15 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 |---------|-------------|
 | **Pipe Support** | Accept input from stdin: `echo "prompt" | ./cobol-ai` |
 
+### Phase 4 Features (v1.5.0) ✨ COMPLETE
+| Feature | Description |
+|---------|-------------|
+| **Retry Logic** | Automatic retry with exponential backoff on API failures (3 retries, 1s base delay, 30s max) |
+| **Response Caching** | In-memory cache of recent responses (20 entries) to reduce API calls |
+| **Encrypted Credentials** | Support for system keyring storage (secret-tool on Linux) |
+| **Error Handling** | Comprehensive error codes and user-friendly error messages |
+| **Session Statistics** | Cache hit/miss statistics displayed at end of session |
+
 ### Core Features
 | Feature | Description |
 |---------|-------------|

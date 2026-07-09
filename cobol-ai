@@ -1,25 +1,16 @@
 #!/bin/bash
 # COBOL AI CLI Wrapper Script
-# Automatically loads environment variables and runs the CLI
-# Supports pipe input: echo "prompt" | ./cobol-ai
+# Sources .env file and exports environment variables before running the COBOL program
 
-# Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/.env"
 
-# Load environment variables from .env file
-if [ -f "$SCRIPT_DIR/.env" ]; then
-    export $(cat "$SCRIPT_DIR/.env" | grep -v '^#' | xargs)
+# Load environment variables from .env file if it exists
+if [[ -f "$ENV_FILE" ]]; then
+    set -a
+    source "$ENV_FILE"
+    set +a
 fi
 
-# Check if input is being piped (not from a terminal)
-if [ ! -t 0 ]; then
-    # Read stdin and save to temp file for COBOL program
-    STDIN_INPUT=$(cat)
-    if [ -n "$STDIN_INPUT" ]; then
-        echo "$STDIN_INPUT" > /tmp/cobol-ai-stdin.txt
-        export COBOL_AI_STDIN="yes"
-    fi
-fi
-
-# Run the CLI with all arguments
-exec "$SCRIPT_DIR/bin/cobol-ai-cli" "$@"
+# Run the COBOL program with all arguments
+exec "${SCRIPT_DIR}/cobol-ai.bin" "$@"
