@@ -89,9 +89,9 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **One-shot Mode** | Send a single prompt and receive a response |
 | **Interactive Mode** | Interactive session for multiple prompts |
 | **Environment Configuration** | Configure via `.env` file |
-| **Error Handling** | Comprehensive error codes and messages |
 | **Timeout Management** | Configurable request timeouts |
 | **Clean Output** | Formatted AI responses with unicode conversion |
+| **Wrapper Script** | Automatic `.env` loading via `./cobol-ai` |
 
 ---
 
@@ -169,18 +169,18 @@ make check-deps
 ## Quick Start
 
 ```bash
-# One-shot mode (recommended)
+# One-shot mode (recommended) - automatically loads .env
 ./cobol-ai "What is 2+2?"
 
 # Interactive mode (recommended)
 ./cobol-ai
 
-# Alternative: Using run-test.sh
+# Using run-test.sh
 ./run-test.sh "What is 2+2?"
 
-# Alternative: Manual environment loading
+# Direct binary (requires manual environment loading)
 source .env
-./bin/cobol-ai-cli "What is 2+2?"
+./cobol-ai.bin "What is 2+2?"
 ```
 
 **Sample Output:**
@@ -269,7 +269,7 @@ For direct API calls without the CLI:
 ```
 cobol-ai-cli/
 ├── bin/                      # Compiled executables
-│   └── cobol-ai-cli         # Main executable
+│   └── cobol-ai-cli         # Main executable (alternative entry point)
 ├── docs/                     # Documentation
 │   ├── README.md            # User documentation
 │   └── ARCHITECTURE.md      # Architecture details
@@ -284,6 +284,7 @@ cobol-ai-cli/
 ├── .gitignore               # Git ignore patterns
 ├── Makefile                 # Build automation
 ├── cobol-ai                 # Wrapper script (recommended entry point)
+├── cobol-ai.bin             # Compiled COBOL binary (called by wrapper)
 ├── cobol-ai-helper.sh       # API helper script
 ├── run-test.sh              # Test runner
 └── roadmap.md               # Project requirements
@@ -506,6 +507,35 @@ export AI_OLLAMA_API_KEY="your-key-here"
 # Or use .env file
 source .env
 ```
+
+---
+
+## Changelog
+
+### v1.5.0 (Phase 4 - Performance & Reliability) - Latest
+- **Retry Logic**: Automatic retry with exponential backoff (3 retries, 1s base, 30s max delay)
+- **Response Caching**: 20-entry in-memory cache to reduce API calls
+- **Encrypted Credentials**: System keyring integration (secret-tool on Linux)
+- **Error Handling**: Comprehensive error codes and user-friendly messages
+- **Session Statistics**: Cache hit/miss statistics at end of session
+- **Wrapper Script**: Automatic `.env` loading for seamless execution
+
+### v1.4.0 (Phase 3)
+- **Pipe Support**: Accept input from stdin (`echo "prompt" | ./cobol-ai`)
+
+### v1.3.0 (Phase 2)
+- **Conversation History**: View full conversation with timestamps
+- **Export Conversations**: Save chats to text file
+- **Model Switching**: Switch between AI models mid-session
+- **Model Listing**: Display available models
+
+### v1.2.0 (Phase 1)
+- **Loading Spinner**: Animated spinner during API requests
+- **Syntax Highlighting**: Code blocks highlighted in cyan
+- **Custom Themes**: Dark/light theme support
+- **Input Validation**: Real-time prompt length indicator
+- **Command History**: Navigate previous prompts
+- **Enhanced Colored UI**: Beautiful terminal colors
 
 ---
 
