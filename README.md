@@ -203,6 +203,19 @@ Thank you for using COBOL AI CLI!
 
 ---
 
+## Screenshots
+
+### One-Shot Mode - Simple Query
+![One-Shot Mode](screenshots/Screenshot%20from%202026-07-09%2012-30-35.png)
+
+### Interactive Mode - Conversation
+![Interactive Mode](screenshots/Screenshot%20from%202026-07-09%2012-31-12.png)
+
+### Phase 4 Features - Retry & Cache Statistics
+![Phase 4 Features](screenshots/Pasted%20image.png)
+
+---
+
 ## Usage
 
 ### One-Shot Mode
