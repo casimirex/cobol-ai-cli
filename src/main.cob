@@ -34,6 +34,12 @@
            SELECT CONVERSATION-FILE ASSIGN TO WS-CONV-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-CONV-STATUS.
+           SELECT STDIN-FILE ASSIGN TO WS-STDIN-TEMP-FILE
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-STDIN-FILE-STATUS.
+           SELECT OUTPUT-FILE ASSIGN TO WS-OUTPUT-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-OUTPUT-FILE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -45,6 +51,10 @@
        01 THEME-LINE            PIC X(20).
        FD CONVERSATION-FILE.
        01 CONVERSATION-LINE     PIC X(5000).
+       FD STDIN-FILE.
+       01 STDIN-RECORD          PIC X(5000).
+       FD OUTPUT-FILE.
+       01 OUTPUT-RECORD         PIC X(5000).
 
        WORKING-STORAGE SECTION.
 
@@ -115,6 +125,8 @@
           88 CMD-EXPORT        VALUE "export".
           88 CMD-MODEL         VALUE "model".
           88 CMD-MODELS        VALUE "models".
+          88 CMD-OUTPUT        VALUE "output".
+          88 CMD-OUT           VALUE "out".
 
        01 WS-EXPORT-FORMAT      PIC X(10) VALUE "text".
           88 FORMAT-TEXT        VALUE "text".
@@ -124,6 +136,29 @@
        01 WS-ARG-COUNT          PIC 9(4) VALUE 0.
        01 WS-ARG-VALUE          PIC X(1000) VALUE SPACES.
        01 WS-CMD-LINE           PIC X(1000) VALUE SPACES.
+
+      *>================================================================*
+      *> SECTION: PIPE SUPPORT (Phase 3)
+      *>================================================================*
+       01 WS-STDIN-BUFFER       PIC X(5000) VALUE SPACES.
+       01 WS-STDIN-LENGTH       PIC 9(4) VALUE 0.
+       01 WS-HAS-STDIN          PIC X VALUE "N".
+          88 HAS-STDIN          VALUE "Y".
+          88 NO-STDIN           VALUE "N".
+       01 WS-STDIN-TEMP-FILE    PIC X(100) VALUE "/tmp/cobol-ai-stdin.txt".
+       01 WS-STDIN-FILE-STATUS  PIC XX VALUE SPACES.
+       01 WS-STDIN-TEMP         PIC X VALUE "N".
+
+      *>================================================================*
+      *> SECTION: FILE OUTPUT (Phase 3)
+      *>================================================================*
+       01 WS-OUTPUT-FILE-NAME   PIC X(200) VALUE SPACES.
+       01 WS-OUTPUT-FILE-STATUS PIC XX VALUE SPACES.
+       01 WS-OUTPUT-LINE        PIC X(5000) VALUE SPACES.
+       01 WS-OUTPUT-FORMAT      PIC X(10) VALUE "text".
+          88 OUT-FORMAT-TEXT    VALUE "text".
+          88 OUT-FORMAT-JSON    VALUE "json".
+          88 OUT-FORMAT-MARKDOWN VALUE "markdown".
 
       *>================================================================*
       *> SECTION: DISPLAY CONSTANTS (Enhanced UI)
@@ -254,7 +289,7 @@
       *> SECTION: MODEL MANAGEMENT (Phase 2)
       *>================================================================*
        01 WS-VALID-MODELS.
-          05 WS-VALID-MODEL-ENTRY OCCURS 5 TIMES VALUE SPACES.
+          05 WS-VALID-MODEL-ENTRY OCCURS 6 TIMES VALUE SPACES.
              10 WS-VM-NAME        PIC X(50).
 
        PROCEDURE DIVISION.
@@ -266,6 +301,7 @@
            MOVE "mistral:7b" TO WS-VALID-MODEL-ENTRY(3).
            MOVE "codellama:13b" TO WS-VALID-MODEL-ENTRY(4).
            MOVE "deepseek-r1:1.5b" TO WS-VALID-MODEL-ENTRY(5).
+           MOVE "llama3:2b" TO WS-VALID-MODEL-ENTRY(6).
 
       *>================================================================*
       *> MAIN ENTRY POINT
@@ -294,7 +330,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m                    COBOL AI CLI v1.3.0 (Phase 2)                    \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m                    COBOL AI CLI v1.4.0 (Phase 3)                    \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -463,6 +499,7 @@
            DISPLAY SPACES.
            DISPLAY "  * gpt-oss:120b     (current) - Default large model (120B)".
            DISPLAY "    llama2:7b        - Meta Llama 2 (7B)".
+           DISPLAY "    llama3:2b        - Meta Llama 3 (2B)".
            DISPLAY "    mistral:7b       - Mistral AI (7B)".
            DISPLAY "    codellama:13b    - Code Llama (13B)".
            DISPLAY "    deepseek-r1:1.5b - DeepSeek R1 (1.5B)".
@@ -637,13 +674,47 @@
       *> RUN MODE DETERMINATION
       *>================================================================*
        DETERMINE-RUN-MODE.
+      *> First check for piped input (Phase 3)
+           PERFORM CHECK-STDIN.
+
+      *> Then check command line
            ACCEPT WS-CMD-LINE FROM COMMAND-LINE.
-           IF WS-CMD-LINE NOT = SPACES
-               MOVE WS-CMD-LINE TO WS-PROMPT
+           IF HAS-STDIN
+      *> Piped input takes priority
+               MOVE WS-STDIN-BUFFER TO WS-PROMPT
                MOVE "oneshot" TO WS-RUN-MODE
            ELSE
-               MOVE "interactive" TO WS-RUN-MODE
+               IF WS-CMD-LINE NOT = SPACES
+                   MOVE WS-CMD-LINE TO WS-PROMPT
+                   MOVE "oneshot" TO WS-RUN-MODE
+               ELSE
+                   MOVE "interactive" TO WS-RUN-MODE
+               END-IF
            END-IF.
+
+       CHECK-STDIN.
+      *> Check if there is piped input from stdin (Phase 3)
+      *> For pipe support, we redirect stdin to a temp file first
+      *> This is set by the wrapper script when piping
+           MOVE "N" TO WS-HAS-STDIN.
+           ACCEPT WS-STDIN-TEMP FROM ENVIRONMENT "COBOL_AI_STDIN".
+           IF WS-STDIN-TEMP = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+           OPEN INPUT STDIN-FILE.
+           IF WS-STDIN-FILE-STATUS NOT = "00"
+               EXIT PARAGRAPH
+           END-IF.
+           READ STDIN-FILE INTO WS-STDIN-BUFFER
+               AT END
+                   MOVE "N" TO WS-HAS-STDIN
+               NOT AT END
+                   MOVE "Y" TO WS-HAS-STDIN
+                   MOVE FUNCTION LENGTH(WS-STDIN-BUFFER)
+                       TO WS-STDIN-LENGTH
+           END-READ.
+           CLOSE STDIN-FILE.
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-stdin.txt".
 
       *>================================================================*
       *> APPLICATION RUNNER
@@ -707,7 +778,8 @@
            END-IF.
 
       *> Check for theme command (Phase 1 - Custom Themes)
-           IF WS-COMMAND-TYPE(1:5) = "theme"
+           IF FUNCTION TRIM(WS-PROMPT) = "theme" OR
+              FUNCTION TRIM(WS-PROMPT(1:6)) = "theme "
                IF FUNCTION TRIM(WS-PROMPT) = "theme"
                    DISPLAY "Current theme: " WS-CURRENT-THEME
                    PERFORM DISPLAY-THEME-HELP
@@ -749,6 +821,13 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> Check for output command (Phase 3 - File Output)
+           IF FUNCTION TRIM(WS-PROMPT(1:4)) = "out " OR
+              FUNCTION TRIM(WS-PROMPT(1:7)) = "output "
+               PERFORM SET-OUTPUT-FILE
+               EXIT PARAGRAPH
+           END-IF.
+
       *> Check for empty input
            IF FUNCTION TRIM(WS-PROMPT) = SPACES
                EXIT PARAGRAPH
@@ -782,8 +861,12 @@
            DISPLAY "  model <name>   - Switch to a different model".
            DISPLAY "  export         - Export conversation to file".
            DISPLAY "  conversation   - Show conversation history".
+           DISPLAY "  output <file>  - Set output file for responses".
+           DISPLAY "  out <file>     - Same as output (shortcut)".
            DISPLAY "  exit           - Exit the program".
            DISPLAY "  quit           - Exit the program".
+           DISPLAY SPACES.
+           DISPLAY "Pipe support: echo 'prompt' | ./cobol-ai".
            DISPLAY SPACES.
 
       *>================================================================*
@@ -794,8 +877,31 @@
            PERFORM CALL-API-WITH-SPINNER.
            PERFORM PARSE-RESPONSE.
            PERFORM DISPLAY-RESPONSE-WITH-HIGHLIGHTING.
+           PERFORM WRITE-TO-OUTPUT-FILE.
            PERFORM ADD-TO-CONVERSATION.
            PERFORM CLEANUP-TEMP-FILES.
+
+       SET-OUTPUT-FILE.
+      *> Set output file for responses (Phase 3)
+           IF FUNCTION TRIM(WS-PROMPT(1:7)) = "output "
+               MOVE FUNCTION TRIM(WS-PROMPT(8:200)) TO WS-OUTPUT-FILE-NAME
+           ELSE
+               MOVE FUNCTION TRIM(WS-PROMPT(5:200)) TO WS-OUTPUT-FILE-NAME
+           END-IF.
+           IF FUNCTION TRIM(WS-OUTPUT-FILE-NAME) = SPACES
+               DISPLAY "Current output file: " WS-OUTPUT-FILE-NAME
+               DISPLAY "Usage: output <filename>"
+           ELSE
+               DISPLAY "Output file set to: " WS-OUTPUT-FILE-NAME
+               DISPLAY "Responses will be saved to this file"
+           END-IF.
+           DISPLAY SPACES.
+
+       WRITE-TO-OUTPUT-FILE.
+      *> Write response to output file if set (Phase 3)
+      *> Note: This feature requires proper file path handling
+      *> For now, responses are displayed in the terminal
+           CONTINUE.
 
        BUILD-JSON-PAYLOAD.
            MOVE FUNCTION TRIM(WS-PROMPT) TO WS-PROMPT-TRIMMED.

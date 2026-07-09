@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make clean *)",
+      "Bash(make all *)",
+      "Bash(./cobol-ai \"Write a JavaScript hello world program\")",
+      "Bash(./cobol-ai What is 2+2? *)",
+      "Bash(./cobol-ai \"What is the capital of France?\")",
+      "Bash(./cobol-ai \"What is 5+5?\")",
+      "Bash(./cobol-ai \"What is 3+3?\")",
+      "Bash(./cobol-ai \"What is 10/2?\")",
+      "Bash(./cobol-ai)",
+      "Bash(./cobol-ai Explain what COBOL is in 3 sentences *)",
+      "Bash(./cobol-ai \"What is COBOL?\")",
+      "Bash(timeout 5 ./run-test.sh \"What is AI?\")",
+      "Bash(./cobol-ai \"What is 2+2?\")",
+      "Bash(git add *)",
+      "Bash(git commit -m 'Phase 3 Complete \\(v1.4.0\\): Pipe Support *)"
+    ]
+  }
+}

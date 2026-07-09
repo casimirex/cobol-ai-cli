@@ -69,6 +69,11 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **Model Switching** | Switch between AI models mid-session with `model <name>` command |
 | **Model Listing** | See available models with `models` command |
 
+### Phase 3 Features (v1.4.0) ✨ NEW
+| Feature | Description |
+|---------|-------------|
+| **Pipe Support** | Accept input from stdin: `echo "prompt" | ./cobol-ai` |
+
 ### Core Features
 | Feature | Description |
 |---------|-------------|

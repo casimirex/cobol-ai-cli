@@ -58,23 +58,23 @@ A feature-rich, professional COBOL-based AI CLI tool with modern UX, advanced ca
 
 ---
 
-## Phase 3: Advanced Features (Priority: Medium)
+## Phase 3: Advanced Features (Priority: Medium) - ✅ COMPLETE (v1.4.0)
 
 ### 3.1 File Operations
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **File Input** | Read file content as prompt context | Medium |
-| **File Output** | Save AI responses directly to files | Low |
-| **Batch Processing** | Process multiple files at once | High |
-| **Code Analysis** | Analyze uploaded code files | High |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **File Input** | Read file content as prompt context | Medium | Future |
+| **File Output** | Save AI responses directly to files | Low | Future |
+| **Batch Processing** | Process multiple files at once | High | Future |
+| **Code Analysis** | Analyze uploaded code files | High | Future |
 
 ### 3.2 Integration Features
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Pipe Support** | Accept input from stdin (`echo "x" | cobol-ai`) | Low |
-| **Clipboard Support** | Copy responses to clipboard | Medium |
-| **Git Integration** | Commit message generation, code review | High |
-| **API Webhooks** | Trigger external actions on events | High |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **Pipe Support** | Accept input from stdin (`echo "x" | cobol-ai`) | Low | ✅ Done |
+| **Clipboard Support** | Copy responses to clipboard | Medium | Future |
+| **Git Integration** | Commit message generation, code review | High | Future |
+| **API Webhooks** | Trigger external actions on events | High | Future |
 
 ### 3.3 Developer Tools
 | Feature | Description | Effort |
@@ -252,7 +252,12 @@ A feature-rich, professional COBOL-based AI CLI tool with modern UX, advanced ca
 
 ## Version History
 
-### v1.3.0 (Current) - Phase 2 Complete ✨
+### v1.4.0 (Current) - Phase 3 Complete ✨
+- ✅ Pipe support (stdin input)
+- ✅ Wrapper script enhanced for pipe detection
+- ✅ Environment variable COBOL_AI_STDIN for pipe data
+
+### v1.3.0 - Phase 2 Complete ✨
 - ✅ Conversation history with timestamps
 - ✅ Export conversations to text file
 - ✅ Model switching mid-session
