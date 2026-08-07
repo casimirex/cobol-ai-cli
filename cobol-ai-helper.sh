@@ -79,17 +79,33 @@ if [ "${COBOL_AI_HELPER_DRY_RUN:-}" = "1" ]; then
     exit 0
 fi
 
-# Make API call
-curl -s -X POST "$BASE_URL/api/generate" \
+# Make API call. The HTTP status is written to its own file so the COBOL
+# side can tell a rate limit apart from a bad key - retrying the former
+# is correct, retrying the latter just wastes time.
+STATUS_FILE="/tmp/cobol-ai-status.txt"
+rm -f "$STATUS_FILE"
+
+HTTP_CODE=$(curl -s -X POST "$BASE_URL/api/generate" \
     -H "Authorization: Bearer $API_KEY" \
     -H "Content-Type: application/json" \
     -d "$JSON_PAYLOAD" \
     -o "$RESPONSE_FILE" \
-    --max-time "$TIMEOUT_SEC"
+    -w '%{http_code}' \
+    --max-time "$TIMEOUT_SEC")
+CURL_RC=$?
 
-# Check if curl succeeded
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to call API"
+if [ $CURL_RC -ne 0 ]; then
+    # 000 means the request never got an HTTP reply: DNS failure,
+    # connection refused, or timeout. All are worth retrying.
+    echo "000" > "$STATUS_FILE"
+    echo "ERROR: Failed to call API (curl exit $CURL_RC)"
     rm -f "$RESPONSE_FILE"
+    exit 1
+fi
+
+echo "$HTTP_CODE" > "$STATUS_FILE"
+
+if [ "$HTTP_CODE" -ge 400 ] 2>/dev/null; then
+    echo "ERROR: API returned HTTP $HTTP_CODE"
     exit 1
 fi

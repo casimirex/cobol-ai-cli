@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.6.1 (Phase 3 - File Input/Output)
+      *> Version:     1.7.0 (HTTP Status Handling)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -17,7 +17,7 @@
       *>   - JSON parsing with unicode support
       *>   - Syntax highlighting for code blocks
       *>   - Real-time prompt length validation
-      *>   - Retry logic with exponential backoff (Phase 4)
+      *>   - Retry logic with HTTP status classification (Phase 4)
       *>   - Persistent response caching to reduce API calls (Phase 4)
       *>   - File input: ask questions about a file (Phase 3)
       *>   - Output file: append exchanges to a file (Phase 3)
@@ -55,6 +55,9 @@
            SELECT PROMPT-FILE ASSIGN TO WS-PROMPT-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-PROMPT-FILE-STATUS.
+           SELECT OPTIONAL STATUS-FILE ASSIGN TO WS-STATUS-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-STATUS-FILE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -76,6 +79,8 @@
        01 USER-FILE-LINE        PIC X(2000).
        FD PROMPT-FILE.
        01 PROMPT-FILE-LINE      PIC X(12000).
+       FD STATUS-FILE.
+       01 STATUS-LINE           PIC X(10).
 
        WORKING-STORAGE SECTION.
 
@@ -108,6 +113,12 @@
           05 WS-MAX-DELAY       PIC 9(5) VALUE 30000.
           05 WS-LAST-HTTP-STATUS PIC S9(4) COMP VALUE 0.
           05 WS-RETRY-REASON    PIC X(100) VALUE SPACES.
+          05 WS-HTTP-RETRYABLE  PIC X VALUE "N".
+             88 HTTP-RETRYABLE   VALUE "Y".
+          05 WS-STATUS-TEXT     PIC X(10) VALUE SPACES.
+       01 WS-STATUS-FILE-NAME   PIC X(100) VALUE
+           "/tmp/cobol-ai-status.txt".
+       01 WS-STATUS-FILE-STATUS PIC XX VALUE SPACES.
 
       *>================================================================*
       *> SECTION: RESPONSE CACHING (Phase 4)
@@ -466,7 +477,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.6.1 (File I/O)                  \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.7.0                             \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -1504,21 +1515,107 @@
       *> Stop spinner
                PERFORM STOP-SPINNER
       *> Try to read and parse response
+               PERFORM READ-HTTP-STATUS
                PERFORM PARSE-RESPONSE
       *> Check if we got a valid response
                IF WS-JSON-FOUND = "Y" THEN
                    DISPLAY "[OK] Request completed!"
                    DISPLAY SPACES
                ELSE
-                   MOVE "No valid response in JSON" TO WS-RETRY-REASON
-                   IF WS-CURRENT-RETRY >= WS-MAX-RETRIES THEN
+                   PERFORM CLASSIFY-HTTP-STATUS
+                   IF NOT HTTP-RETRYABLE THEN
+      *> A bad key or a bad URL will fail identically every time,
+      *> so stop rather than burning the full backoff schedule.
                        MOVE "Y" TO WS-FATAL-ERROR
-                       DISPLAY "[ERR] All retry attempts exhausted"
                        DISPLAY SPACES
+                       CALL "SYSTEM" USING
+                           "printf '\033[31m[ERR]\033[0m Request failed, not retrying'"
+                       DISPLAY SPACES
+                       DISPLAY "  " FUNCTION TRIM(WS-RETRY-REASON)
+                       DISPLAY SPACES
+                       PERFORM LOG-ERROR
+                   ELSE
+                       IF WS-CURRENT-RETRY >= WS-MAX-RETRIES THEN
+                           MOVE "Y" TO WS-FATAL-ERROR
+                           DISPLAY "[ERR] All retry attempts exhausted"
+                           DISPLAY "  Last reason: "
+                               FUNCTION TRIM(WS-RETRY-REASON)
+                           DISPLAY SPACES
+                           PERFORM LOG-ERROR
+                       END-IF
                    END-IF
                END-IF
                ADD 1 TO WS-CURRENT-RETRY
            END-PERFORM.
+
+       READ-HTTP-STATUS.
+      *> Pick up the status the helper recorded for the last request
+           MOVE 0 TO WS-LAST-HTTP-STATUS.
+           MOVE SPACES TO WS-STATUS-TEXT.
+           OPEN INPUT STATUS-FILE.
+           IF WS-STATUS-FILE-STATUS NOT = "00"
+               AND WS-STATUS-FILE-STATUS NOT = "05"
+               EXIT PARAGRAPH
+           END-IF.
+           READ STATUS-FILE INTO WS-STATUS-TEXT
+               AT END
+                   MOVE SPACES TO WS-STATUS-TEXT
+           END-READ.
+           CLOSE STATUS-FILE.
+           IF FUNCTION TRIM(WS-STATUS-TEXT) NOT = SPACES
+              AND FUNCTION TRIM(WS-STATUS-TEXT) IS NUMERIC
+               COMPUTE WS-LAST-HTTP-STATUS =
+                   FUNCTION NUMVAL(WS-STATUS-TEXT)
+           END-IF.
+
+       CLASSIFY-HTTP-STATUS.
+      *> Decide whether another attempt could possibly succeed
+           MOVE "N" TO WS-HTTP-RETRYABLE.
+           MOVE SPACES TO WS-RETRY-REASON.
+           EVALUATE TRUE
+               WHEN WS-LAST-HTTP-STATUS = 0
+                   MOVE "Y" TO WS-HTTP-RETRYABLE
+                   MOVE ERR-NETWORK TO WS-LAST-ERROR-CODE
+                   MOVE "Could not reach the API (network, DNS or timeout)"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS = 200
+      *> Reached the API but the body was unusable - could be transient
+                   MOVE "Y" TO WS-HTTP-RETRYABLE
+                   MOVE ERR-PARSE TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 200 but no response field in the JSON"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS = 429
+                   MOVE "Y" TO WS-HTTP-RETRYABLE
+                   MOVE ERR-API TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 429 rate limited - backing off"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS >= 500
+                   MOVE "Y" TO WS-HTTP-RETRYABLE
+                   MOVE ERR-API TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 5xx server error - retrying"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS = 401
+                   MOVE ERR-INVALID-CONFIG TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 401 unauthorized - check AI_OLLAMA_API_KEY"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS = 403
+                   MOVE ERR-INVALID-CONFIG TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 403 forbidden - key lacks access to this model"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS = 404
+                   MOVE ERR-INVALID-CONFIG TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 404 not found - check AI_OLLAMA_BASE_URL and model"
+                       TO WS-RETRY-REASON
+               WHEN WS-LAST-HTTP-STATUS >= 400
+                   MOVE ERR-API TO WS-LAST-ERROR-CODE
+                   MOVE "HTTP 4xx client error - the request was rejected"
+                       TO WS-RETRY-REASON
+               WHEN OTHER
+                   MOVE "Y" TO WS-HTTP-RETRYABLE
+                   MOVE ERR-API TO WS-LAST-ERROR-CODE
+                   MOVE "Unexpected HTTP status" TO WS-RETRY-REASON
+           END-EVALUATE.
+           MOVE FUNCTION TRIM(WS-RETRY-REASON) TO WS-LAST-ERROR-MSG.
 
        WAIT-RETRY-DELAY.
       *> Wait for retry delay (simplified - uses shell sleep)
@@ -2026,6 +2123,7 @@
        CLEANUP-TEMP-FILES.
            CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-response.json".
            CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-prompt.txt".
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-status.txt".
 
        CLEANUP-PROGRAM.
       *> Persist the cache so the next run starts warm

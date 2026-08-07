@@ -96,7 +96,7 @@ question about a different file is a separate entry.
 ### Phase 4 Features (v1.5.0) ✨ COMPLETE
 | Feature | Description |
 |---------|-------------|
-| **Retry Logic** | Automatic retry with exponential backoff on API failures (3 retries, 1s base delay, 30s max) |
+| **Retry Logic** | Retries only what can succeed: 429, 5xx and network failures back off exponentially (3 retries, 1s base, 30s max); 401/403/404 fail immediately with the reason |
 | **Response Caching** | Persistent cache of recent responses (20 entries, 7-day TTL) to reduce API calls |
 | **Encrypted Credentials** | Support for system keyring storage (secret-tool on Linux) |
 | **Error Handling** | Comprehensive error codes and user-friendly error messages |
@@ -566,7 +566,30 @@ source .env
 
 ## Changelog
 
-### v1.6.1 (Output File) - Latest
+### v1.7.0 (HTTP Status Handling) - Latest
+- **The retry loop now knows what went wrong.** `WS-LAST-HTTP-STATUS` was
+  declared and never once assigned; `curl -s` ran without `-w '%{http_code}'`
+  or `--fail`, so an HTTP 401 wrote its error body to the response file and
+  exited 0. Every failure looked identical — "no valid response in JSON" — and
+  every failure was retried.
+- **Terminal errors fail immediately**: 401, 403, 404 and other 4xx stop after
+  one attempt with a specific message (`HTTP 401 unauthorized - check
+  AI_OLLAMA_API_KEY`) instead of burning the full 1s/2s/4s backoff.
+- **Transient errors still back off**: 429, 5xx, and connection/DNS/timeout
+  failures (recorded as status `000`) use all three retries.
+- Error codes are set per failure class, so `stats` and the error log
+  distinguish network from config from API faults.
+- 7 new tests driving each status class through a stub, plus a check that the
+  real helper records the status.
+
+| Status | Behaviour |
+|--------|-----------|
+| 200 with unusable body | Retried (may be transient) |
+| 429, 5xx | Retried with exponential backoff |
+| 000 (unreachable) | Retried |
+| 401, 403, 404, other 4xx | Fails immediately with the reason |
+
+### v1.6.1 (Output File)
 - **`output <file>` now actually writes.** The command reported "Responses will
   be saved to this file" while `WRITE-TO-OUTPUT-FILE` was a `CONTINUE` stub that
   saved nothing. Each exchange is now appended with a timestamp, the model name,

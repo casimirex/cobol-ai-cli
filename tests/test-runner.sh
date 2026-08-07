@@ -543,6 +543,108 @@ assert_output_has "$CURRENT_LOG" "Cannot write output file" \
     "STUB-RESPONSE" && pass_test
 
 # ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}HTTP status handling${NC}"
+# ---------------------------------------------------------------------------
+#
+# A stub that reports a chosen HTTP status lets us drive the retry
+# classifier without a server: a 401 must stop immediately, a 429 or 5xx
+# must use the full backoff schedule.
+
+# setup_failing_stub <http status> <response body>
+setup_failing_stub() {
+    rm -rf "$STUB_DIR"
+    mkdir -p "$STUB_DIR"
+    cat > "$STUB_DIR/cobol-ai-helper.sh" <<STUB
+#!/bin/bash
+printf 'call\n' >> "$STUB_ARGS"
+echo '$1' > /tmp/cobol-ai-status.txt
+echo '$2' > /tmp/cobol-ai-response.json
+exit 1
+STUB
+    chmod +x "$STUB_DIR/cobol-ai-helper.sh"
+}
+
+stub_call_count() {
+    [[ -f "$STUB_ARGS" ]] && wc -l < "$STUB_ARGS" || echo 0
+}
+
+begin_test "unauthorized-is-not-retried"
+reset_cache
+setup_failing_stub 401 '{"error":"invalid api key"}'
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+CALLS=$(stub_call_count)
+if [[ "$CALLS" -ne 1 ]]; then
+    fail_test "401 was attempted $CALLS times, expected 1"
+else
+    assert_output_has "$CURRENT_LOG" "not retrying" "401" && pass_test
+fi
+
+begin_test "rate-limit-is-retried"
+reset_cache
+setup_failing_stub 429 '{"error":"rate limited"}'
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+CALLS=$(stub_call_count)
+if [[ "$CALLS" -ne 4 ]]; then
+    fail_test "429 was attempted $CALLS times, expected 4 (1 + 3 retries)"
+else
+    assert_output_has "$CURRENT_LOG" "429" "retry attempts exhausted" \
+        && pass_test
+fi
+
+begin_test "server-error-is-retried"
+reset_cache
+setup_failing_stub 503 '{"error":"unavailable"}'
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+CALLS=$(stub_call_count)
+if [[ "$CALLS" -ne 4 ]]; then
+    fail_test "503 was attempted $CALLS times, expected 4"
+else
+    assert_output_has "$CURRENT_LOG" "5xx" && pass_test
+fi
+
+begin_test "not-found-is-not-retried"
+reset_cache
+setup_failing_stub 404 '{"error":"model not found"}'
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+CALLS=$(stub_call_count)
+if [[ "$CALLS" -ne 1 ]]; then
+    fail_test "404 was attempted $CALLS times, expected 1"
+else
+    assert_output_has "$CURRENT_LOG" "404" "BASE_URL" && pass_test
+fi
+
+begin_test "unreachable-host-is-retried-as-network"
+reset_cache
+setup_failing_stub 000 '{}'
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+CALLS=$(stub_call_count)
+if [[ "$CALLS" -ne 4 ]]; then
+    fail_test "network failure was attempted $CALLS times, expected 4"
+else
+    assert_output_has "$CURRENT_LOG" "Could not reach the API" && pass_test
+fi
+
+begin_test "failed-request-is-not-cached"
+if grep -qF "error" "$CACHE_FILE" 2>/dev/null; then
+    fail_test "a failed request was written to the cache"
+else
+    pass_test
+fi
+
+# The real helper must record a status for the COBOL side to read.
+begin_test "helper-records-http-status"
+rm -f /tmp/cobol-ai-status.txt
+AI_OLLAMA_API_KEY="test-key-0123456789" \
+AI_OLLAMA_BASE_URL="http://127.0.0.1:1" \
+    ./cobol-ai-helper.sh "hi" test-model > "$CURRENT_LOG" 2>&1
+if [[ "$(cat /tmp/cobol-ai-status.txt 2>/dev/null)" == "000" ]]; then
+    pass_test
+else
+    fail_test "expected status 000 for a refused connection, got '$(cat /tmp/cobol-ai-status.txt 2>/dev/null)'"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 reset_cache
