@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.6.0 (Phase 3 - File Input)
+      *> Version:     1.6.1 (Phase 3 - File Input/Output)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -20,6 +20,7 @@
       *>   - Retry logic with exponential backoff (Phase 4)
       *>   - Persistent response caching to reduce API calls (Phase 4)
       *>   - File input: ask questions about a file (Phase 3)
+      *>   - Output file: append exchanges to a file (Phase 3)
       *>   - Encrypted credential storage (Phase 4)
       *>   - Comprehensive error handling (Phase 4)
       *>================================================================*
@@ -42,7 +43,7 @@
            SELECT STDIN-FILE ASSIGN TO WS-STDIN-TEMP-FILE
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-STDIN-FILE-STATUS.
-           SELECT OUTPUT-FILE ASSIGN TO WS-OUTPUT-FILE-NAME
+           SELECT OPTIONAL OUTPUT-FILE ASSIGN TO WS-OUTPUT-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-OUTPUT-FILE-STATUS.
            SELECT CACHE-FILE ASSIGN TO WS-CACHE-FILE
@@ -68,7 +69,7 @@
        FD STDIN-FILE.
        01 STDIN-RECORD          PIC X(5000).
        FD OUTPUT-FILE.
-       01 OUTPUT-RECORD         PIC X(5000).
+       01 OUTPUT-RECORD         PIC X(25000).
        FD CACHE-FILE.
        01 CACHE-RECORD          PIC X(25079).
        FD USER-FILE.
@@ -287,6 +288,7 @@
       *>================================================================*
        01 WS-OUTPUT-FILE-NAME   PIC X(200) VALUE SPACES.
        01 WS-OUTPUT-FILE-STATUS PIC XX VALUE SPACES.
+       01 WS-OUTPUT-ARG         PIC X(200) VALUE SPACES.
        01 WS-OUTPUT-LINE        PIC X(5000) VALUE SPACES.
        01 WS-OUTPUT-FORMAT      PIC X(10) VALUE "text".
           88 OUT-FORMAT-TEXT    VALUE "text".
@@ -464,7 +466,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.6.0 (File Input)               \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.6.1 (File I/O)                  \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -1159,6 +1161,7 @@
            DISPLAY "  conversation   - Show conversation history".
            DISPLAY "  output <file>  - Set output file for responses".
            DISPLAY "  out <file>     - Same as output (shortcut)".
+           DISPLAY "  output off     - Stop appending to the output file".
            DISPLAY "  stats          - Show cache and error statistics".
            DISPLAY "  cache clear    - Empty the persistent response cache".
            DISPLAY "  file <path> [question] - Ask about a file's contents".
@@ -1348,25 +1351,103 @@
 
        SET-OUTPUT-FILE.
       *> Set output file for responses (Phase 3)
+      *> Parse into a scratch field first - a bare "output" must report
+      *> the current setting, not silently clear it.
            IF FUNCTION TRIM(WS-PROMPT(1:7)) = "output "
-               MOVE FUNCTION TRIM(WS-PROMPT(8:200)) TO WS-OUTPUT-FILE-NAME
+               MOVE FUNCTION TRIM(WS-PROMPT(8:200)) TO WS-OUTPUT-ARG
            ELSE
-               MOVE FUNCTION TRIM(WS-PROMPT(5:200)) TO WS-OUTPUT-FILE-NAME
+               MOVE FUNCTION TRIM(WS-PROMPT(5:200)) TO WS-OUTPUT-ARG
            END-IF.
-           IF FUNCTION TRIM(WS-OUTPUT-FILE-NAME) = SPACES
-               DISPLAY "Current output file: " WS-OUTPUT-FILE-NAME
-               DISPLAY "Usage: output <filename>"
-           ELSE
-               DISPLAY "Output file set to: " WS-OUTPUT-FILE-NAME
-               DISPLAY "Responses will be saved to this file"
-           END-IF.
+
+           EVALUATE TRUE
+               WHEN FUNCTION LOWER-CASE(FUNCTION TRIM(WS-OUTPUT-ARG))
+                    = "off"
+                   MOVE SPACES TO WS-OUTPUT-FILE-NAME
+                   DISPLAY "Output file logging disabled"
+               WHEN FUNCTION TRIM(WS-OUTPUT-ARG) = SPACES
+                   IF FUNCTION TRIM(WS-OUTPUT-FILE-NAME) = SPACES
+                       DISPLAY "No output file set"
+                   ELSE
+                       DISPLAY "Current output file: "
+                           FUNCTION TRIM(WS-OUTPUT-FILE-NAME)
+                   END-IF
+                   DISPLAY "Usage: output <filename> | output off"
+               WHEN OTHER
+                   MOVE FUNCTION TRIM(WS-OUTPUT-ARG)
+                       TO WS-OUTPUT-FILE-NAME
+                   DISPLAY "Output file set to: "
+                       FUNCTION TRIM(WS-OUTPUT-FILE-NAME)
+                   DISPLAY "Responses will be appended to this file"
+           END-EVALUATE.
            DISPLAY SPACES.
 
        WRITE-TO-OUTPUT-FILE.
-      *> Write response to output file if set (Phase 3)
-      *> Note: This feature requires proper file path handling
-      *> For now, responses are displayed in the terminal
-           CONTINUE.
+      *> Append the exchange to the output file if one is set (Phase 3).
+      *> Runs after DISPLAY-RESPONSE-WITH-HIGHLIGHTING, which is what
+      *> populates WS-CLEAN-RESPONSE.
+           IF FUNCTION TRIM(WS-OUTPUT-FILE-NAME) = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+           IF WS-JSON-FOUND NOT = "Y" OR WS-CLEAN-RESPONSE = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Status 05 means the OPTIONAL file was absent and has just been
+      *> created - a success, not a reason to reopen it.
+           OPEN EXTEND OUTPUT-FILE.
+           IF WS-OUTPUT-FILE-STATUS NOT = "00"
+              AND WS-OUTPUT-FILE-STATUS NOT = "05"
+      *> Fall back to creating the file
+               OPEN OUTPUT OUTPUT-FILE
+           END-IF.
+           IF WS-OUTPUT-FILE-STATUS NOT = "00"
+              AND WS-OUTPUT-FILE-STATUS NOT = "05"
+               MOVE ERR-FILE-IO TO WS-LAST-ERROR-CODE
+               MOVE "Cannot write to output file"
+                   TO WS-LAST-ERROR-MSG
+               PERFORM LOG-ERROR
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR]\033[0m Cannot write output file'"
+               DISPLAY SPACES
+               DISPLAY "      " FUNCTION TRIM(WS-OUTPUT-FILE-NAME)
+               DISPLAY "      (status " WS-OUTPUT-FILE-STATUS ")"
+               DISPLAY SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE FUNCTION CURRENT-DATE(1:14) TO WS-TIME-VALUE.
+           MOVE SPACES TO OUTPUT-RECORD.
+           STRING "=== " DELIMITED BY SIZE
+                  WS-TIME-VALUE(1:4) "-" WS-TIME-VALUE(5:2) "-"
+                  WS-TIME-VALUE(7:2) DELIMITED BY SIZE
+                  " " WS-TIME-VALUE(9:2) ":" WS-TIME-VALUE(11:2) ":"
+                  WS-TIME-VALUE(13:2) DELIMITED BY SIZE
+                  " | model: " DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-MODEL) DELIMITED BY SIZE
+                  " ===" DELIMITED BY SIZE
+               INTO OUTPUT-RECORD
+           END-STRING.
+           WRITE OUTPUT-RECORD.
+
+           MOVE SPACES TO OUTPUT-RECORD.
+           STRING "> " DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-PROMPT) DELIMITED BY SIZE
+               INTO OUTPUT-RECORD
+           END-STRING.
+           WRITE OUTPUT-RECORD.
+
+           MOVE SPACES TO OUTPUT-RECORD.
+           WRITE OUTPUT-RECORD.
+
+           MOVE WS-CLEAN-RESPONSE TO OUTPUT-RECORD.
+           WRITE OUTPUT-RECORD.
+
+           MOVE SPACES TO OUTPUT-RECORD.
+           WRITE OUTPUT-RECORD.
+           CLOSE OUTPUT-FILE.
+
+           DISPLAY "  [SAVED] Appended to "
+               FUNCTION TRIM(WS-OUTPUT-FILE-NAME).
 
        BUILD-JSON-PAYLOAD.
            MOVE FUNCTION TRIM(WS-PROMPT) TO WS-PROMPT-TRIMMED.

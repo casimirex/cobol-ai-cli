@@ -491,6 +491,58 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Output file${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "responses-are-appended-to-output-file"
+reset_cache
+setup_stub_helper
+rm -f "$STUB_DIR/session.md"
+run_stubbed "$CURRENT_LOG" \
+    'output session.md\nfirst question\n\nsecond question\n\nexit\n'
+if [[ ! -f "$STUB_DIR/session.md" ]]; then
+    fail_test "output file was never created"
+elif [[ "$(grep -c '^=== ' "$STUB_DIR/session.md")" -ne 2 ]]; then
+    fail_test "expected 2 appended exchanges, got $(grep -c '^=== ' "$STUB_DIR/session.md")"
+else
+    assert_output_has "$STUB_DIR/session.md" \
+        "> first question" "> second question" "STUB-RESPONSE" && pass_test
+fi
+
+begin_test "output-off-stops-writing"
+reset_cache
+setup_stub_helper
+rm -f "$STUB_DIR/session.md"
+run_stubbed "$CURRENT_LOG" \
+    'output session.md\nkept question\n\noutput off\ndropped question\n\nexit\n'
+if grep -qF "dropped question" "$STUB_DIR/session.md"; then
+    fail_test "kept writing after 'output off'"
+else
+    assert_output_has "$STUB_DIR/session.md" "> kept question" && pass_test
+fi
+
+# A bare "output" used to overwrite the setting with the empty argument
+# it had just parsed, silently disabling logging.
+begin_test "bare-output-reports-without-clearing"
+reset_cache
+setup_stub_helper
+rm -f "$STUB_DIR/session.md"
+run_stubbed "$CURRENT_LOG" \
+    'output session.md\noutput\nstill logging\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "Current output file: session.md" \
+    && assert_output_has "$STUB_DIR/session.md" "> still logging" \
+    && pass_test
+
+begin_test "unwritable-output-path-is-reported"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" \
+    'output /nonexistent-dir-xyz/out.txt\na question\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "Cannot write output file" \
+    "STUB-RESPONSE" && pass_test
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 reset_cache

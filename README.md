@@ -266,7 +266,9 @@ Run without arguments for an interactive session:
 | `model <name>` | Switch to a different model |
 | `export` | Export conversation to a file |
 | `conversation` | Show conversation history |
-| `output <file>` | Set output file for responses |
+| `output <file>` | Append each exchange to a file |
+| `output` | Show the current output file |
+| `output off` | Stop appending |
 | `stats` | Show cache and error statistics |
 | `cache clear` | Empty the persistent response cache |
 | `file <path> [question]` | Ask a question about a file's contents |
@@ -564,7 +566,17 @@ source .env
 
 ## Changelog
 
-### v1.6.0 (File Input) - Latest
+### v1.6.1 (Output File) - Latest
+- **`output <file>` now actually writes.** The command reported "Responses will
+  be saved to this file" while `WRITE-TO-OUTPUT-FILE` was a `CONTINUE` stub that
+  saved nothing. Each exchange is now appended with a timestamp, the model name,
+  the prompt and the response.
+- **`output off`** stops appending; a bare **`output`** reports the current
+  setting instead of silently clearing it, which is what it used to do — it
+  overwrote the filename with the empty argument it had just parsed.
+- 4 new tests covering append, `off`, the bare form, and an unwritable path.
+
+### v1.6.0 (File Input)
 - **`file <path> [question]`**: reads a file and asks the model about it, in
   both one-shot and interactive mode. Contents are capped at 10,000 characters
   and truncated with a warning; the file is part of the cache key.
