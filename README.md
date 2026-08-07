@@ -220,7 +220,7 @@ source .env
 **Sample Output:**
 ```
 +======================================================================+
-|              COBOL AI CLI v1.11.1                                    |
+|              COBOL AI CLI v1.11.2                                    |
 |                  Powered by Ollama Cloud API                         |
 +======================================================================+
 
@@ -251,14 +251,30 @@ animates in place rather than printing a frame per line.)
 
 ## Screenshots
 
-### One-Shot Mode - Simple Query
-![One-Shot Mode](screenshots/Screenshot%20from%202026-07-09%2012-30-35.png)
+All three were captured at v1.5.0. The banner reads differently today, but every
+element shown is still present.
 
-### Interactive Mode - Conversation
-![Interactive Mode](screenshots/Screenshot%20from%202026-07-09%2012-31-12.png)
+### Interactive mode — asking it to write COBOL
 
-### Retry and cache statistics
-![Phase 4 Features](screenshots/Pasted%20image.png)
+![Interactive session generating a COBOL Hello World program](screenshots/Screenshot%20from%202026-07-09%2012-30-35.png)
+
+The banner, the `[OK]` configuration summary, the `[SEND]` / `[RECV]` / `[OK]`
+status icons, and a response whose fenced code block is highlighted in cyan.
+
+### The same answer, continued
+
+![Markdown table of COBOL divisions and highlighted shell commands](screenshots/Screenshot%20from%202026-07-09%2012-31-12.png)
+
+The model's markdown table survives intact, shell commands are highlighted, and
+the exchange ends at `> Press Enter to continue or exit to quit:`.
+
+### The `help` command
+
+![The help command listing available commands](screenshots/Pasted%20image.png)
+
+A historical artifact: this listing predates `file`, `cache clear` and
+`version`. It also shows `conversation`, which at the time silently did nothing
+— see the v1.9.1 changelog entry.
 
 ---
 
@@ -684,7 +700,17 @@ source .env
 
 ## Changelog
 
-### v1.11.1 (Documentation Accuracy) - Latest
+### v1.11.2 (Screenshot Captions) - Latest
+- **All three screenshot captions were wrong.** They were written without ever
+  opening the images. The first, labelled "One-Shot Mode - Simple Query", is
+  actually an interactive session asking the model to write COBOL. The second,
+  "Interactive Mode - Conversation", is the continuation of that same answer.
+  The third, "Retry and cache statistics", is the `help` command output and
+  shows neither retries nor cache statistics. Replaced with descriptions taken
+  from looking at them.
+- Noted that all three predate `file`, `cache clear` and `version`.
+
+### v1.11.1 (Documentation Accuracy)
 - **The "Sample Output" block was fabricated.** It showed a `v1.0.0` banner and
   an `AI:` response prefix that appears nowhere in the source — the program has
   printed a boxed banner and `>>> AI Response:` for many versions. Replaced with

@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.11.1 (Documentation Accuracy)
+      *> Version:     1.11.2 (Screenshot Captions)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
