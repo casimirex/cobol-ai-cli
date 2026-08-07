@@ -348,6 +348,9 @@ setup_stub_helper() {
     cat > "$STUB_DIR/cobol-ai-helper.sh" <<STUB
 #!/bin/bash
 printf '%s\n' "\$*" >> "$STUB_ARGS"
+if [ "\$1" = "--prompt-file" ] && [ -f "\$2" ]; then
+    cp "\$2" "$STUB_DIR/last-prompt.txt"
+fi
 echo '{"model":"stub","response":"STUB-RESPONSE","done":true}' \
     > /tmp/cobol-ai-response.json
 STUB
@@ -400,6 +403,91 @@ elif ! grep -qF "STUB-RESPONSE" "$CACHE_FILE" 2>/dev/null; then
 else
     run_cli_input "$CURRENT_LOG" 'stats\nexit\n'
     assert_output_has "$CURRENT_LOG" "Cached Items: 0020" && pass_test
+fi
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}File input${NC}"
+# ---------------------------------------------------------------------------
+
+LAST_PROMPT="$STUB_DIR/last-prompt.txt"
+
+begin_test "file-contents-reach-the-prompt"
+reset_cache
+setup_stub_helper
+printf 'alpha line\nbeta line\ngamma line\n' > "$STUB_DIR/sample.txt"
+run_stubbed "$CURRENT_LOG" 'file sample.txt summarise this\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "[FILE]" "sample.txt" "Lines: 00003" \
+    && assert_output_has "$LAST_PROMPT" \
+        "summarise this" "BEGIN FILE" "alpha line" "gamma line" "END FILE" \
+    && pass_test
+
+# Quotes in file contents used to break the shell command, because the
+# prompt was interpolated into a single-quoted helper argument.
+begin_test "file-with-quotes-survives-intact"
+reset_cache
+setup_stub_helper
+cat > "$STUB_DIR/quoted.py" <<'PYFILE'
+def greet(name):
+    """A docstring with 'single' and "double" quotes."""
+    return f"Hello, {name}!"
+PYFILE
+run_stubbed "$CURRENT_LOG" 'file quoted.py explain\n\nexit\n'
+assert_output_has "$LAST_PROMPT" \
+    "A docstring with 'single' and \"double\" quotes." \
+    'return f"Hello, {name}!"' && pass_test
+
+begin_test "missing-file-is-reported-not-sent"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'file /nonexistent/nope.txt explain\n\nexit\n'
+if [[ -s "$STUB_ARGS" ]]; then
+    fail_test "helper was called despite the file being unreadable"
+else
+    assert_output_has "$CURRENT_LOG" "Cannot read file" && pass_test
+fi
+
+begin_test "oversized-file-is-truncated"
+reset_cache
+setup_stub_helper
+for i in $(seq 1 500); do
+    echo "0123456789012345678901234567890123456789"
+done > "$STUB_DIR/big.txt"
+run_stubbed "$CURRENT_LOG" 'file big.txt summarise\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "truncated" && pass_test
+
+# The attached file must be part of the cache key, or the same question
+# asked about a different file would be answered from the first file.
+begin_test "attached-file-is-part-of-the-cache-key"
+reset_cache
+setup_stub_helper
+printf 'contents of file one\n' > "$STUB_DIR/one.txt"
+printf 'contents of file two\n' > "$STUB_DIR/two.txt"
+run_stubbed "$TEST_OUTPUT/key-a.log" 'file one.txt describe it\n\nexit\n'
+run_stubbed "$TEST_OUTPUT/key-b.log" 'file two.txt describe it\n\nexit\n'
+if grep -qF "CACHE HIT" "$TEST_OUTPUT/key-b.log"; then
+    fail_test "a different file reused the first file's cached answer"
+elif [[ "$(wc -l < "$CACHE_FILE")" -ne 2 ]]; then
+    fail_test "expected 2 distinct cache entries, got $(wc -l < "$CACHE_FILE")"
+else
+    pass_test
+fi
+
+begin_test "same-file-and-question-hits-cache"
+run_stubbed "$CURRENT_LOG" 'file one.txt describe it\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "CACHE HIT" && pass_test
+
+begin_test "helper-escapes-json-special-characters"
+printf 'has "double" quotes\nand a second line\twith a tab\n' \
+    > "$TEST_OUTPUT/escape-input.txt"
+COBOL_AI_HELPER_DRY_RUN=1 \
+    ./cobol-ai-helper.sh --prompt-file "$TEST_OUTPUT/escape-input.txt" \
+    esc-model > "$CURRENT_LOG" 2>&1
+PAYLOAD_LINE=$(grep -c '^PAYLOAD=' "$CURRENT_LOG")
+if [[ "$PAYLOAD_LINE" -ne 1 ]]; then
+    fail_test "payload spans multiple lines - a raw newline leaked through"
+else
+    assert_output_has "$CURRENT_LOG" '\"double\"' '\n' '\t' && pass_test
 fi
 
 # ---------------------------------------------------------------------------

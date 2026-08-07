@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.5.2 (Phase 4 - Performance & Reliability)
+      *> Version:     1.6.0 (Phase 3 - File Input)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -19,6 +19,7 @@
       *>   - Real-time prompt length validation
       *>   - Retry logic with exponential backoff (Phase 4)
       *>   - Persistent response caching to reduce API calls (Phase 4)
+      *>   - File input: ask questions about a file (Phase 3)
       *>   - Encrypted credential storage (Phase 4)
       *>   - Comprehensive error handling (Phase 4)
       *>================================================================*
@@ -47,6 +48,12 @@
            SELECT CACHE-FILE ASSIGN TO WS-CACHE-FILE
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-CACHE-STATUS.
+           SELECT USER-FILE ASSIGN TO WS-USER-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-USER-FILE-STATUS.
+           SELECT PROMPT-FILE ASSIGN TO WS-PROMPT-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-PROMPT-FILE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -64,6 +71,10 @@
        01 OUTPUT-RECORD         PIC X(5000).
        FD CACHE-FILE.
        01 CACHE-RECORD          PIC X(25079).
+       FD USER-FILE.
+       01 USER-FILE-LINE        PIC X(2000).
+       FD PROMPT-FILE.
+       01 PROMPT-FILE-LINE      PIC X(12000).
 
        WORKING-STORAGE SECTION.
 
@@ -108,7 +119,7 @@
           05 WS-CACHE-MISSES    PIC 9(5) VALUE 0.
           05 WS-CACHE-FILE      PIC X(100) VALUE "/tmp/cobol-ai-cache.dat".
           05 WS-CACHE-STATUS    PIC XX VALUE SPACES.
-          05 WS-CACHE-KEY       PIC X(500) VALUE SPACES.
+          05 WS-CACHE-KEY       PIC X(12100) VALUE SPACES.
           05 WS-CACHE-HASH      PIC X(64) VALUE SPACES.
 
        01 WS-CACHE-TABLE.
@@ -135,8 +146,8 @@
       *> Cache key hashing and expiry
        01 WS-CACHE-WORK.
           05 WS-HASH-ACC         PIC 9(12) VALUE 0.
-          05 WS-HASH-POS         PIC 9(4) VALUE 0.
-          05 WS-HASH-KEY-LEN     PIC 9(4) VALUE 0.
+          05 WS-HASH-POS         PIC 9(5) VALUE 0.
+          05 WS-HASH-KEY-LEN     PIC 9(5) VALUE 0.
           05 WS-HASH-ACC-DISP    PIC 9(12) VALUE 0.
           05 WS-HASH-LEN-DISP    PIC 9(4) VALUE 0.
           05 WS-CACHE-TTL-DAYS   PIC 9(4) VALUE 7.
@@ -165,6 +176,7 @@
           05 ERR-CACHE            PIC S9(4) COMP VALUE 5.
           05 ERR-TIMEOUT          PIC S9(4) COMP VALUE 6.
           05 ERR-RETRY-EXHAUSTED  PIC S9(4) COMP VALUE 7.
+          05 ERR-FILE-IO          PIC S9(4) COMP VALUE 8.
 
       *>================================================================*
       *> SECTION: HTTP CLIENT
@@ -201,6 +213,35 @@
        01 WS-PROMPT             PIC X(1000) VALUE SPACES.
        01 WS-PROMPT-TRIMMED     PIC X(1000) VALUE SPACES.
        01 WS-PROMPT-LEN         PIC 9(4) VALUE 0.
+
+      *>================================================================*
+      *> SECTION: FILE INPUT (Phase 3)
+      *>================================================================*
+       01 WS-FILE-INPUT.
+          05 WS-USER-FILE-NAME    PIC X(255) VALUE SPACES.
+          05 WS-USER-FILE-STATUS  PIC XX VALUE SPACES.
+          05 WS-FILE-CONTENT      PIC X(10000) VALUE SPACES.
+          05 WS-FILE-MAX          PIC 9(5) VALUE 10000.
+          05 WS-FILE-POS          PIC 9(5) VALUE 1.
+          05 WS-FILE-LINE-LEN     PIC 9(5) VALUE 0.
+          05 WS-FILE-LINES        PIC 9(5) VALUE 0.
+          05 WS-FILE-CHARS        PIC 9(5) VALUE 0.
+          05 WS-FILE-ARG          PIC X(1000) VALUE SPACES.
+          05 WS-FILE-QUESTION     PIC X(1000) VALUE SPACES.
+          05 WS-FILE-SPLIT        PIC 9(5) VALUE 0.
+          05 WS-FILE-ARG-LEN      PIC 9(5) VALUE 0.
+          05 WS-FILE-TRUNCATED    PIC X VALUE "N".
+             88 FILE-TRUNCATED     VALUE "Y".
+          05 WS-FILE-LOADED       PIC X VALUE "N".
+             88 FILE-LOADED        VALUE "Y".
+
+      *> The composed prompt actually sent to the API: either the typed
+      *> prompt, or the question plus the attached file's contents.
+       01 WS-FULL-PROMPT        PIC X(12000) VALUE SPACES.
+       01 WS-PROMPT-FILE-NAME   PIC X(100) VALUE
+           "/tmp/cobol-ai-prompt.txt".
+       01 WS-PROMPT-FILE-STATUS PIC XX VALUE SPACES.
+       01 WS-NL                 PIC X VALUE X"0A".
 
        01 WS-INPUT-LIMITS.
           05 WS-MIN-PROMPT-LEN PIC 9(4) VALUE 1.
@@ -423,7 +464,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.5.2 (Phase 4 - Complete)         \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.6.0 (File Input)               \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -946,6 +987,14 @@
       *>================================================================*
        RUN-APPLICATION.
            IF MODE-ONE-SHOT
+      *> One-shot supports the same file syntax as interactive mode
+               MOVE "N" TO WS-FILE-LOADED
+               IF FUNCTION LOWER-CASE(WS-PROMPT(1:5)) = "file "
+                   PERFORM LOAD-PROMPT-FILE
+                   IF NOT FILE-LOADED
+                       EXIT PARAGRAPH
+                   END-IF
+               END-IF
                PERFORM PROCESS-PROMPT
            ELSE
                PERFORM RUN-INTERACTIVE
@@ -1066,6 +1115,15 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> Check for file command (Phase 3 - File Input)
+           MOVE "N" TO WS-FILE-LOADED.
+           IF FUNCTION LOWER-CASE(WS-PROMPT(1:5)) = "file "
+               PERFORM LOAD-PROMPT-FILE
+               IF NOT FILE-LOADED
+                   EXIT PARAGRAPH
+               END-IF
+           END-IF.
+
       *> Check for empty input
            IF FUNCTION TRIM(WS-PROMPT) = SPACES
                EXIT PARAGRAPH
@@ -1103,6 +1161,7 @@
            DISPLAY "  out <file>     - Same as output (shortcut)".
            DISPLAY "  stats          - Show cache and error statistics".
            DISPLAY "  cache clear    - Empty the persistent response cache".
+           DISPLAY "  file <path> [question] - Ask about a file's contents".
            DISPLAY "  exit           - Exit the program".
            DISPLAY "  quit           - Exit the program".
            DISPLAY SPACES.
@@ -1113,6 +1172,9 @@
       *> PROMPT PROCESSING
       *>================================================================*
        PROCESS-PROMPT.
+      *> Build the text to send (may include an attached file)
+           PERFORM COMPOSE-PROMPT.
+
       *> Phase 4: Check cache first before making API call
            PERFORM CHECK-RESPONSE-CACHE.
 
@@ -1131,6 +1193,158 @@
            PERFORM WRITE-TO-OUTPUT-FILE
            PERFORM ADD-TO-CONVERSATION
            PERFORM CLEANUP-TEMP-FILES.
+
+      *>================================================================*
+      *> SECTION: FILE INPUT (Phase 3)
+      *>================================================================*
+       LOAD-PROMPT-FILE.
+      *> Handle "file <path> [question]" - read the file into the prompt
+           MOVE "N" TO WS-FILE-LOADED.
+           MOVE "N" TO WS-FILE-TRUNCATED.
+           MOVE SPACES TO WS-FILE-CONTENT.
+           MOVE SPACES TO WS-USER-FILE-NAME.
+           MOVE SPACES TO WS-FILE-QUESTION.
+           MOVE 1 TO WS-FILE-POS.
+           MOVE 0 TO WS-FILE-LINES.
+
+      *> Split "<path> <question>" on the first space
+           MOVE FUNCTION TRIM(WS-PROMPT(6:995)) TO WS-FILE-ARG.
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-FILE-ARG))
+               TO WS-FILE-ARG-LEN.
+           IF WS-FILE-ARG = SPACES
+               DISPLAY "Usage: file <path> [question]"
+               DISPLAY SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE 0 TO WS-FILE-SPLIT.
+           PERFORM VARYING WS-FILE-POS FROM 1 BY 1
+               UNTIL WS-FILE-POS > WS-FILE-ARG-LEN
+               OR WS-FILE-SPLIT > 0
+               IF WS-FILE-ARG(WS-FILE-POS:1) = SPACE
+                   MOVE WS-FILE-POS TO WS-FILE-SPLIT
+               END-IF
+           END-PERFORM.
+
+           IF WS-FILE-SPLIT > 0
+               MOVE WS-FILE-ARG(1:WS-FILE-SPLIT - 1)
+                   TO WS-USER-FILE-NAME
+               MOVE FUNCTION TRIM(WS-FILE-ARG(WS-FILE-SPLIT:))
+                   TO WS-FILE-QUESTION
+           ELSE
+               MOVE FUNCTION TRIM(WS-FILE-ARG) TO WS-USER-FILE-NAME
+               MOVE "Explain what this file does."
+                   TO WS-FILE-QUESTION
+           END-IF.
+
+      *> Read the file
+           MOVE 1 TO WS-FILE-POS.
+           OPEN INPUT USER-FILE.
+           IF WS-USER-FILE-STATUS NOT = "00"
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR]\033[0m Cannot read file'"
+               DISPLAY SPACES
+               DISPLAY "      " FUNCTION TRIM(WS-USER-FILE-NAME)
+               DISPLAY "      (status " WS-USER-FILE-STATUS ")"
+               DISPLAY SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+           PERFORM UNTIL WS-USER-FILE-STATUS NOT = "00"
+               READ USER-FILE
+                   AT END
+                       MOVE "99" TO WS-USER-FILE-STATUS
+                   NOT AT END
+                       PERFORM APPEND-FILE-LINE
+               END-READ
+           END-PERFORM.
+           CLOSE USER-FILE.
+
+           COMPUTE WS-FILE-CHARS = WS-FILE-POS - 1.
+           IF WS-FILE-LINES = 0
+               DISPLAY "  File is empty: "
+                   FUNCTION TRIM(WS-USER-FILE-NAME)
+               DISPLAY SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE "Y" TO WS-FILE-LOADED.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[32m[FILE]\033[0m Attached'".
+           DISPLAY SPACES.
+           DISPLAY "    Path:  " FUNCTION TRIM(WS-USER-FILE-NAME).
+           DISPLAY "    Lines: " WS-FILE-LINES.
+           DISPLAY "    Chars: " WS-FILE-CHARS.
+           IF FILE-TRUNCATED
+               CALL "SYSTEM" USING
+                   "printf '\033[33m[WARN]\033[0m File truncated to fit the context limit'"
+               DISPLAY SPACES
+           END-IF.
+           DISPLAY SPACES.
+
+       APPEND-FILE-LINE.
+      *> Append one line, stopping cleanly once the buffer is full
+           IF FILE-TRUNCATED
+               EXIT PARAGRAPH
+           END-IF.
+
+           IF USER-FILE-LINE = SPACES
+               MOVE 0 TO WS-FILE-LINE-LEN
+           ELSE
+               MOVE FUNCTION LENGTH(FUNCTION TRIM(USER-FILE-LINE
+                   TRAILING)) TO WS-FILE-LINE-LEN
+           END-IF.
+
+           IF WS-FILE-POS + WS-FILE-LINE-LEN + 1 > WS-FILE-MAX
+               MOVE "Y" TO WS-FILE-TRUNCATED
+               EXIT PARAGRAPH
+           END-IF.
+
+           IF WS-FILE-LINE-LEN > 0
+               MOVE USER-FILE-LINE(1:WS-FILE-LINE-LEN)
+                   TO WS-FILE-CONTENT(WS-FILE-POS:WS-FILE-LINE-LEN)
+               ADD WS-FILE-LINE-LEN TO WS-FILE-POS
+           END-IF.
+           MOVE WS-NL TO WS-FILE-CONTENT(WS-FILE-POS:1).
+           ADD 1 TO WS-FILE-POS.
+           ADD 1 TO WS-FILE-LINES.
+
+       COMPOSE-PROMPT.
+      *> Build the text actually sent to the model. This is what the
+      *> cache keys on, so an attached file must be part of it.
+           MOVE SPACES TO WS-FULL-PROMPT.
+           IF FILE-LOADED
+               STRING FUNCTION TRIM(WS-FILE-QUESTION) DELIMITED BY SIZE
+                      WS-NL WS-NL DELIMITED BY SIZE
+                      "--- BEGIN FILE: " DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-USER-FILE-NAME)
+                          DELIMITED BY SIZE
+                      " ---" DELIMITED BY SIZE
+                      WS-NL DELIMITED BY SIZE
+                      WS-FILE-CONTENT(1:WS-FILE-CHARS)
+                          DELIMITED BY SIZE
+                      WS-NL DELIMITED BY SIZE
+                      "--- END FILE ---" DELIMITED BY SIZE
+                   INTO WS-FULL-PROMPT
+               END-STRING
+           ELSE
+               MOVE FUNCTION TRIM(WS-PROMPT) TO WS-FULL-PROMPT
+           END-IF.
+
+       WRITE-PROMPT-FILE.
+      *> Hand the prompt to the helper through a file so that quotes and
+      *> newlines in file contents cannot break the shell command.
+           OPEN OUTPUT PROMPT-FILE.
+           IF WS-PROMPT-FILE-STATUS NOT = "00"
+               MOVE ERR-FILE-IO TO WS-LAST-ERROR-CODE
+               MOVE "Cannot write prompt file" TO WS-LAST-ERROR-MSG
+               PERFORM LOG-ERROR
+               EXIT PARAGRAPH
+           END-IF.
+           MOVE WS-FULL-PROMPT TO PROMPT-FILE-LINE.
+           WRITE PROMPT-FILE-LINE.
+           CLOSE PROMPT-FILE.
 
        SET-OUTPUT-FILE.
       *> Set output file for responses (Phase 3)
@@ -1190,9 +1404,11 @@
                DISPLAY SPACES
       *> Build helper command
                MOVE SPACES TO WS-HELPER-CMD
-               STRING "./cobol-ai-helper.sh '"
+               PERFORM WRITE-PROMPT-FILE
+               STRING "./cobol-ai-helper.sh --prompt-file '"
                       DELIMITED BY SIZE
-                      FUNCTION TRIM(WS-PROMPT-TRIMMED) DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-PROMPT-FILE-NAME)
+                          DELIMITED BY SIZE
                       "' '"
                       DELIMITED BY SIZE
                       FUNCTION TRIM(WS-MODEL) DELIMITED BY SIZE
@@ -1348,10 +1564,11 @@
       *> 64-char fingerprint held in WS-CACHE-HASH.
       *> WS-CACHE-HASH is scratch storage only - it must never be a table
       *> slot, or a lookup would compare an entry against itself.
-           MOVE FUNCTION TRIM(WS-PROMPT) TO WS-PROMPT-TRIMMED.
+      *> Key on the composed prompt, so attaching a different file to the
+      *> same question produces a different cache entry.
            MOVE SPACES TO WS-CACHE-KEY.
            STRING FUNCTION TRIM(WS-MODEL) "|"
-               FUNCTION TRIM(WS-PROMPT-TRIMMED)
+               FUNCTION TRIM(WS-FULL-PROMPT)
                DELIMITED BY SIZE INTO WS-CACHE-KEY.
 
       *> Rolling polynomial hash over the whole key so that prompts
@@ -1375,6 +1592,13 @@
                   WS-HASH-LEN-DISP
                   WS-CACHE-KEY(1:48)
                DELIMITED BY SIZE INTO WS-CACHE-HASH.
+
+      *> The literal tail is kept for readability, but an attached file
+      *> puts newlines in it, and a newline inside a LINE SEQUENTIAL
+      *> record splits it across lines and destroys the entry on reload.
+           INSPECT WS-CACHE-HASH REPLACING ALL X"0A" BY ".".
+           INSPECT WS-CACHE-HASH REPLACING ALL X"0D" BY ".".
+           INSPECT WS-CACHE-HASH REPLACING ALL X"09" BY ".".
 
        CHECK-RESPONSE-CACHE.
       *> Check if response exists in cache
@@ -1720,6 +1944,7 @@
 
        CLEANUP-TEMP-FILES.
            CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-response.json".
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-prompt.txt".
 
        CLEANUP-PROGRAM.
       *> Persist the cache so the next run starts warm

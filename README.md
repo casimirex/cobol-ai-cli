@@ -74,6 +74,25 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 |---------|-------------|
 | **Pipe Support** | Accept input from stdin: `echo "prompt" | ./cobol-ai` |
 
+### File Input (v1.6.0) ✨ NEW
+
+Attach a file's contents to a question, in either mode:
+
+```bash
+# One-shot
+./cobol-ai "file src/main.cob explain the cache eviction logic"
+
+# Interactive
+> file README.md summarise the setup steps
+
+# Question is optional - defaults to "Explain what this file does."
+> file config.json
+```
+
+Contents are capped at 10,000 characters; longer files are truncated with a
+warning. The attached file is part of the cache key, so asking the same
+question about a different file is a separate entry.
+
 ### Phase 4 Features (v1.5.0) ✨ COMPLETE
 | Feature | Description |
 |---------|-------------|
@@ -250,6 +269,7 @@ Run without arguments for an interactive session:
 | `output <file>` | Set output file for responses |
 | `stats` | Show cache and error statistics |
 | `cache clear` | Empty the persistent response cache |
+| `file <path> [question]` | Ask a question about a file's contents |
 | `exit` | Exit the program |
 | `quit` | Exit the program |
 
@@ -544,7 +564,22 @@ source .env
 
 ## Changelog
 
-### v1.5.2 (Real Test Suite) - Latest
+### v1.6.0 (File Input) - Latest
+- **`file <path> [question]`**: reads a file and asks the model about it, in
+  both one-shot and interactive mode. Contents are capped at 10,000 characters
+  and truncated with a warning; the file is part of the cache key.
+- **Prompts are passed to the helper through a file** (`--prompt-file`) instead
+  of a shell argument. A prompt containing an apostrophe previously broke the
+  generated shell command, and file contents make that a certainty.
+- **Fixed JSON escaping**: the helper escaped `"` but not backslashes, and left
+  raw newlines and tabs in the payload, which is invalid JSON. Any multi-line
+  prompt produced a malformed request.
+- **Fixed cache records split by newlines**: the cache key's readable tail is
+  copied into the record, and a newline there split one record across several
+  lines, so file-based entries could never be read back.
+- 7 new tests covering file input, quoting, truncation, and cache keying.
+
+### v1.5.2 (Real Test Suite)
 - **Replaced the placeholder test suite**: five of the six previous "tests" were
   `echo` statements that passed unconditionally, so `make test` reported green
   while the cache was returning wrong answers. 22 behavioural tests now assert on

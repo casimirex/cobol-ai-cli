@@ -29,18 +29,45 @@ if [ -z "$API_KEY" ]; then
     exit 1
 fi
 
-# Get prompt from arguments
-PROMPT="$1"
+# Get the prompt. Reading it from a file avoids shell-quoting entirely,
+# which matters once prompts carry file contents full of quotes and
+# newlines. The positional form is kept for manual use.
+if [ "$1" = "--prompt-file" ]; then
+    PROMPT_FILE="$2"
+    MODEL="${3:-$MODEL}"
+    if [ ! -f "$PROMPT_FILE" ]; then
+        echo "ERROR: prompt file not found: $PROMPT_FILE"
+        exit 1
+    fi
+    PROMPT="$(cat "$PROMPT_FILE")"
+else
+    PROMPT="$1"
+fi
+
 if [ -z "$PROMPT" ]; then
-    echo "Usage: $0 <prompt>"
+    echo "Usage: $0 <prompt> [model]"
+    echo "       $0 --prompt-file <path> [model]"
     exit 1
 fi
 
 # Use fixed response file location
 RESPONSE_FILE="/tmp/cobol-ai-response.json"
 
-# Build JSON payload - properly escape special characters
-ESCAPED_PROMPT=$(echo "$PROMPT" | sed 's/"/\\"/g' | sed 's/\\n/\\n/g')
+# Build JSON payload. The backslash substitution must come first, or it
+# would re-escape the backslashes introduced by the later ones. Newlines
+# and tabs have to become escapes because a raw one is invalid inside a
+# JSON string.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\t'/\\t}"
+    s="${s//$'\r'/}"
+    s="${s//$'\n'/\\n}"
+    printf '%s' "$s"
+}
+
+ESCAPED_PROMPT="$(json_escape "$PROMPT")"
 JSON_PAYLOAD="{\"model\":\"$MODEL\",\"prompt\":\"$ESCAPED_PROMPT\",\"stream\":false}"
 
 # Dry run: report the resolved configuration and make no network call.
