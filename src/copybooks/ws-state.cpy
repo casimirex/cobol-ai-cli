@@ -63,6 +63,15 @@
       *>================================================================*
       *> SECTION: MODEL MANAGEMENT (Phase 2)
       *>================================================================*
+       01 WS-MODEL-MAX          PIC 9(2) VALUE 6.
+       01 WS-MODEL-INDEX        PIC 9(2) VALUE 0.
+       01 WS-MODEL-BAD          PIC 9(3) VALUE 0.
+       01 WS-MODEL-FOUND        PIC X VALUE "N".
+          88 MODEL-FOUND         VALUE "Y".
+
+      *> Keep WS-MODEL-MAX equal to the OCCURS count: the validation loop
+      *> stopped at 5 while the table held 6, so the last model could
+      *> never be selected even though `models` advertised it.
        01 WS-VALID-MODELS.
           05 WS-VALID-MODEL-ENTRY OCCURS 6 TIMES VALUE SPACES.
              10 WS-VM-NAME        PIC X(50).

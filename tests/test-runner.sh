@@ -979,6 +979,57 @@ reset_cache
     "$INST/bin/cobol-ai.bin" "hello" ) > "$CURRENT_LOG" 2>&1
 assert_output_lacks "$CURRENT_LOG" "cobol-ai-helper.sh: not found" && pass_test
 
+# Regression: the validation loop stopped at 5 while the model table held
+# 6, so `llama3:2b` was advertised by `models` but rejected by `model`.
+# Deriving the cases from the advertised list is the point - a hand-picked
+# example passed while the last entry was broken.
+begin_test "every-advertised-model-can-be-selected"
+reset_cache
+run_cli_input "$TEST_OUTPUT/model-list.log" 'models\nexit\n'
+ADVERTISED=$(sed -n 's/.*[[:space:]]\([a-z0-9][a-z0-9.:_-]*:[a-z0-9.]*\)[[:space:]].*/\1/p' \
+    "$TEST_OUTPUT/model-list.log" | sort -u)
+if [[ -z "$ADVERTISED" ]]; then
+    fail_test "could not parse any model names out of the models listing"
+else
+    REJECTED=""
+    for m in $ADVERTISED; do
+        reset_cache
+        run_cli_input "$TEST_OUTPUT/model-try.log" "model $m\nexit\n"
+        grep -qF "Model changed to: $m" "$TEST_OUTPUT/model-try.log" \
+            || REJECTED="$REJECTED $m"
+    done
+    if [[ -n "$REJECTED" ]]; then
+        fail_test "advertised but not selectable:$REJECTED"
+    else
+        pass_test
+    fi
+fi
+
+begin_test "unknown-model-is-rejected"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'model definitely-not-a-model:9b\nexit\n'
+assert_output_has "$CURRENT_LOG" "Unknown model" && pass_test
+
+# The model name is the only user-controlled value that reaches a shell
+# command string, so it must not be able to break out of its quoting.
+begin_test "model-name-cannot-inject-a-shell-command"
+reset_cache
+# Deliberately short: WS-MODEL is PIC X(50), and a longer payload would be
+# truncated into harmlessness, making this pass without proving anything.
+INJECT_MARKER="/tmp/cobol-ai-ijm"
+rm -f "$INJECT_MARKER"
+run_cli_input "$CURRENT_LOG" \
+    "model x'; touch $INJECT_MARKER; echo '\na question\n\nexit\n"
+if [[ -e "$INJECT_MARKER" ]]; then
+    rm -f "$INJECT_MARKER"
+    fail_test "a crafted model name executed a shell command"
+elif grep -qE 'Invalid characters in model name|Unknown model' \
+        "$CURRENT_LOG"; then
+    pass_test
+else
+    fail_test "the crafted name was neither rejected nor reported"
+fi
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

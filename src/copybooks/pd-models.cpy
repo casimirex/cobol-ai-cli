@@ -71,18 +71,41 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> The name ends up inside a single-quoted shell argument, so refuse
+      *> anything that could break out of the quoting. The whitelist below
+      *> already covers this today, but it is the only barrier, and a future
+      *> change allowing arbitrary model names would silently remove it.
+           MOVE 0 TO WS-MODEL-BAD
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL "'" 
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL ";"
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL "`"
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL "$"
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL "&"
+           INSPECT WS-TEMP-STRING TALLYING WS-MODEL-BAD
+               FOR ALL "|"
+           IF WS-MODEL-BAD > 0
+               DISPLAY "Invalid characters in model name."
+               DISPLAY SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
       *> Validate model exists in our list
-           MOVE "N" TO WS-JSON-FOUND.
-           PERFORM VARYING WS-JSON-I FROM 1 BY 1
-               UNTIL WS-JSON-I > 5
-               IF FUNCTION TRIM(WS-VALID-MODEL-ENTRY(WS-JSON-I)) =
+           MOVE "N" TO WS-MODEL-FOUND.
+           PERFORM VARYING WS-MODEL-INDEX FROM 1 BY 1
+               UNTIL WS-MODEL-INDEX > WS-MODEL-MAX
+               IF FUNCTION TRIM(WS-VALID-MODEL-ENTRY(WS-MODEL-INDEX)) =
                   FUNCTION TRIM(WS-TEMP-STRING)
-                   MOVE "Y" TO WS-JSON-FOUND
+                   MOVE "Y" TO WS-MODEL-FOUND
                    EXIT PERFORM
                END-IF
            END-PERFORM.
 
-           IF WS-JSON-FOUND = "N"
+           IF NOT MODEL-FOUND
                DISPLAY "Unknown model. Available models are:"
                PERFORM SHOW-MODELS
                EXIT PARAGRAPH

@@ -598,7 +598,30 @@ source .env
 
 ## Changelog
 
-### v1.10.0 (Backoff, Error Log, Installation) - Latest
+### v1.10.1 (Model Selection) - Latest
+- **Fixed an advertised model that could not be selected.** The validation loop
+  ran `UNTIL WS-JSON-I > 5` against a 6-entry table, so `llama3:2b` was listed by
+  `models` and rejected by `model` as unknown. The bound is now tied to
+  `WS-MODEL-MAX`, declared beside the table.
+- `CHANGE-MODEL` no longer borrows `WS-JSON-I` / `WS-JSON-FOUND` as scratch; it
+  has its own index and flag.
+- **Added a second barrier against shell injection.** The model name is the only
+  user-controlled value that reaches a shell command string. The whitelist
+  already stopped crafted names, but it was the *sole* defence — verified by
+  removing it, after which `model x';touch /tmp/IJ2;echo '` executed. Names
+  containing `' ; \` $ & |` are now rejected outright, so relaxing the whitelist
+  later (to allow arbitrary Ollama models, say) will not silently open a hole.
+- 3 new tests, including one that walks every model the `models` command
+  advertises rather than a hand-picked example — the previous test used
+  `llama2:7b` and passed while the last entry was broken.
+
+**A note on the injection test.** The first version used a marker path under
+`test-output/`, which made the payload longer than `WS-MODEL`'s 50 characters.
+It was truncated into harmlessness and the test passed without proving anything.
+The marker is now `/tmp/cobol-ai-ijm`, short enough that the payload survives
+intact — confirmed by removing both barriers and watching the test fail.
+
+### v1.10.0 (Backoff, Error Log, Installation)
 - **Exponential backoff never ran.** `WAIT-RETRY-DELAY` built its command with
   `STRING "sleep " ... INTO WS-HELPER-CMD` without clearing the field first.
   `STRING` overwrites from position 1 and leaves the rest intact, so the command
