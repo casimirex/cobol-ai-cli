@@ -1,0 +1,1393 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>COBOL AI CLI — The Complete Book</title>
+<style>
+/* ─────────────────────────────────────────────────────────────
+   COBOL AI CLI — The Complete Book
+   Palette anchored to the CLI's own terminal: deep aubergine
+   ground, cyan rules, amber headings, magenta accents.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --ink:#efe6f2; --ink-dim:#b7a6bf; --ink-faint:#8a7a92;
+  --bg:#251829; --bg-2:#2e1e33; --bg-3:#3a2740; --bg-code:#1d1220;
+  --cyan:#5ed7e0; --amber:#e8c47c; --magenta:#d08bea; --green:#8fd88f;
+  --red:#f0857d; --rule:#4a3350; --shadow:rgba(0,0,0,.45);
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Charter,Georgia,serif;
+  --mono:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  --measure:70ch;
+}
+:root[data-theme="light"]{
+  --ink:#2b1f30; --ink-dim:#5d4c66; --ink-faint:#8a7a92;
+  --bg:#fbf7f2; --bg-2:#f3ebf2; --bg-3:#e9dcea; --bg-code:#2a1b2e;
+  --cyan:#0e7c88; --amber:#8a6410; --magenta:#8d3fb0; --green:#2f7a3f;
+  --red:#b83028; --rule:#d9c8dd; --shadow:rgba(80,50,90,.14);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--serif);font-size:18px;line-height:1.72;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* progress */
+#bar{position:fixed;top:0;left:0;height:3px;width:0;z-index:60;
+  background:linear-gradient(90deg,var(--cyan),var(--magenta),var(--amber));}
+
+/* layout */
+.shell{display:grid;grid-template-columns:300px minmax(0,1fr);gap:0;max-width:1500px;margin:0 auto}
+nav.toc{position:sticky;top:0;height:100vh;overflow-y:auto;padding:26px 20px 60px;
+  border-right:1px solid var(--rule);background:var(--bg-2)}
+main{padding:0 clamp(20px,5vw,84px) 140px;min-width:0}
+
+/* toc */
+.toc-brand{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--cyan);margin-bottom:4px}
+.toc-title{font-size:19px;line-height:1.25;margin:0 0 16px;font-weight:600}
+#filter{width:100%;padding:8px 10px;border-radius:7px;border:1px solid var(--rule);
+  background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;margin-bottom:14px}
+#filter:focus{outline:2px solid var(--cyan);outline-offset:1px}
+nav.toc ol{list-style:none;margin:0;padding:0;font-family:var(--sans);font-size:13.5px}
+nav.toc .part{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--amber);margin:20px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--rule)}
+nav.toc a{display:block;padding:5px 9px;border-radius:6px;color:var(--ink-dim);
+  text-decoration:none;border-left:2px solid transparent;line-height:1.4}
+nav.toc a:hover{background:var(--bg-3);color:var(--ink)}
+nav.toc a.on{color:var(--cyan);border-left-color:var(--cyan);background:var(--bg-3)}
+nav.toc a .n{font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);margin-right:7px}
+
+/* toolbar */
+.tools{position:fixed;top:14px;right:16px;z-index:55;display:flex;gap:8px}
+.tools button{width:38px;height:38px;border-radius:10px;border:1px solid var(--rule);
+  background:var(--bg-2);color:var(--ink);cursor:pointer;font-size:16px;line-height:1;
+  box-shadow:0 3px 12px var(--shadow)}
+.tools button:hover{border-color:var(--cyan);color:var(--cyan)}
+
+/* cover */
+.cover{min-height:96vh;display:flex;flex-direction:column;justify-content:center;
+  padding:60px 0;position:relative;overflow:hidden}
+.punch{position:absolute;inset:0;opacity:.16;pointer-events:none;
+  background-image:radial-gradient(circle at 1px 1px,var(--cyan) 1px,transparent 0);
+  background-size:26px 26px;-webkit-mask-image:linear-gradient(180deg,#000,transparent 72%);
+  mask-image:linear-gradient(180deg,#000,transparent 72%)}
+.cover .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--cyan);margin-bottom:20px}
+.cover h1{font-size:clamp(46px,8vw,92px);line-height:.98;margin:0 0 8px;font-weight:600;
+  letter-spacing:-.025em}
+.cover h1 em{font-style:normal;display:block;
+  background:linear-gradient(100deg,var(--cyan),var(--magenta) 55%,var(--amber));
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.cover .sub{font-size:clamp(19px,2.4vw,25px);color:var(--ink-dim);max-width:30ch;margin:22px 0 34px}
+.cover .meta{font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);
+  border-top:1px solid var(--rule);padding-top:18px;max-width:640px}
+.stats{display:flex;flex-wrap:wrap;gap:34px;margin-top:34px}
+.stat b{display:block;font-family:var(--mono);font-size:30px;color:var(--amber);line-height:1}
+.stat span{font-family:var(--sans);font-size:11.5px;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--ink-faint)}
+
+/* structure */
+.part-open{margin:110px 0 50px;padding:34px 0 0;border-top:2px solid var(--rule)}
+.part-open .pn{font-family:var(--mono);font-size:11px;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--magenta)}
+.part-open h2{font-size:clamp(30px,4.4vw,46px);margin:8px 0 12px;font-weight:600;letter-spacing:-.02em}
+.part-open p{color:var(--ink-dim);max-width:var(--measure);margin:0}
+
+section.ch{padding-top:52px;scroll-margin-top:20px}
+.chnum{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:11px;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--cyan);
+  border:1px solid var(--rule);border-radius:999px;padding:4px 13px;margin-bottom:14px}
+.chnum::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--cyan)}
+section.ch>h3{font-size:clamp(26px,3.6vw,37px);line-height:1.16;margin:0 0 18px;
+  font-weight:600;letter-spacing:-.02em;max-width:24ch}
+section.ch h4{font-size:20px;margin:38px 0 10px;color:var(--amber);font-weight:600}
+section.ch h5{font-family:var(--sans);font-size:13px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--ink-faint);margin:26px 0 8px}
+p,ul,ol.body{max-width:var(--measure)}
+p{margin:0 0 17px}
+.lede{font-size:21px;line-height:1.62;color:var(--ink-dim)}
+.lede::first-letter{float:left;font-size:61px;line-height:.82;padding:6px 11px 0 0;
+  color:var(--magenta);font-weight:600}
+a{color:var(--cyan)}
+strong{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:.855em;background:var(--bg-3);
+  padding:1.5px 5px;border-radius:4px;color:var(--amber);word-break:break-word}
+
+/* code blocks */
+pre{background:var(--bg-code);border:1px solid var(--rule);border-radius:11px;
+  padding:17px 19px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;
+  line-height:1.62;margin:20px 0;color:#e6dcea;box-shadow:0 5px 22px var(--shadow)}
+pre code{background:none;padding:0;color:inherit;font-size:inherit}
+.filename{font-family:var(--mono);font-size:11px;color:var(--ink-faint);
+  margin:20px 0 -12px;padding-left:3px;letter-spacing:.05em}
+.k{color:var(--magenta)}.s{color:var(--green)}.c{color:#7d6a85;font-style:italic}
+.n{color:var(--amber)}.f{color:var(--cyan)}.p{color:#e6dcea}
+
+/* callouts */
+.box{border-left:3px solid var(--cyan);background:var(--bg-2);border-radius:0 10px 10px 0;
+  padding:15px 19px;margin:24px 0;max-width:var(--measure)}
+.box .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--cyan);display:block;margin-bottom:6px}
+.box p:last-child{margin-bottom:0}
+.box.warn{border-color:var(--amber)} .box.warn .lbl{color:var(--amber)}
+.box.bug{border-color:var(--red)} .box.bug .lbl{color:var(--red)}
+.box.win{border-color:var(--green)} .box.win .lbl{color:var(--green)}
+
+/* tables */
+.tw{overflow-x:auto;margin:22px 0;border:1px solid var(--rule);border-radius:11px}
+table{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:14px}
+th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+th{background:var(--bg-2);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:600;white-space:nowrap}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-2)}
+td code{font-size:12.5px}
+
+/* figures */
+figure{margin:30px 0;max-width:none}
+figure img{width:100%;border-radius:11px;border:1px solid var(--rule);
+  box-shadow:0 12px 40px var(--shadow);cursor:zoom-in;display:block}
+figcaption{font-family:var(--sans);font-size:13px;color:var(--ink-faint);
+  margin-top:11px;padding-left:2px;max-width:var(--measure)}
+figcaption b{color:var(--ink-dim);font-weight:600}
+.svgfig{background:var(--bg-2);border:1px solid var(--rule);border-radius:11px;padding:22px}
+.svgfig svg{width:100%;height:auto;display:block}
+
+/* lightbox */
+#lb{position:fixed;inset:0;background:rgba(12,6,14,.94);display:none;z-index:100;
+  align-items:center;justify-content:center;padding:34px;cursor:zoom-out}
+#lb.on{display:flex}
+#lb img{max-width:100%;max-height:100%;border-radius:9px;box-shadow:0 20px 70px #000}
+
+/* misc */
+.kv{display:grid;grid-template-columns:auto 1fr;gap:7px 18px;font-family:var(--mono);
+  font-size:13.5px;margin:20px 0;max-width:var(--measure)}
+.kv dt{color:var(--cyan)} .kv dd{margin:0;color:var(--ink-dim)}
+hr.sep{border:none;height:1px;background:var(--rule);margin:52px 0;max-width:var(--measure)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;
+  text-transform:uppercase;padding:2.5px 9px;border-radius:999px;border:1px solid var(--rule);
+  color:var(--ink-faint);margin-right:6px}
+.tag.fix{color:var(--green);border-color:var(--green)}
+.tag.sev{color:var(--red);border-color:var(--red)}
+ul.clean{list-style:none;padding-left:0}
+ul.clean li{padding-left:23px;position:relative;margin-bottom:9px}
+ul.clean li::before{content:"▸";position:absolute;left:2px;color:var(--cyan)}
+.end{text-align:center;font-family:var(--mono);font-size:12px;color:var(--ink-faint);
+  margin-top:100px;padding-top:34px;border-top:1px solid var(--rule)}
+
+@media (max-width:960px){
+  .shell{grid-template-columns:1fr}
+  nav.toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--rule)}
+  body{font-size:17px}
+}
+@media print{
+  nav.toc,.tools,#bar,#lb{display:none}
+  body{background:#fff;color:#000;font-size:11pt}
+  .shell{display:block} main{padding:0}
+  pre{background:#f4f4f4;color:#000;box-shadow:none}
+  section.ch{page-break-before:always}
+}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div class="tools">
+  <button id="theme" title="Toggle light / dark">◑</button>
+  <button id="top" title="Back to top">↑</button>
+</div>
+<div id="lb"><img alt=""></div>
+
+<div class="shell">
+<nav class="toc">
+  <div class="toc-brand">The Complete Book</div>
+  <div class="toc-title">COBOL AI CLI</div>
+  <input id="filter" placeholder="Filter chapters…" aria-label="Filter chapters">
+  <ol id="toclist"></ol>
+</nav>
+
+<main>
+
+<!-- ══════════════════════ COVER ══════════════════════ -->
+<header class="cover">
+  <div class="punch"></div>
+  <div class="kicker">Novice → Professional</div>
+  <h1>COBOL<em>meets the</em><em>language model</em></h1>
+  <p class="sub">A complete field guide to a 2,673-line GnuCOBOL program that
+     talks to a modern AI API — and to the engineering that made it trustworthy.</p>
+  <div class="stats">
+    <div class="stat"><b>2,673</b><span>lines of COBOL</span></div>
+    <div class="stat"><b>18</b><span>copybooks</span></div>
+    <div class="stat"><b>65</b><span>paragraphs</span></div>
+    <div class="stat"><b>79</b><span>passing tests</span></div>
+    <div class="stat"><b>16</b><span>defects found &amp; fixed</span></div>
+  </div>
+  <div class="meta">
+    Version 1.11.1 · GnuCOBOL 3.1+ · Ollama Cloud API<br>
+    Every command, screenshot, measurement and code excerpt in this book was
+    taken from the working program.
+  </div>
+</header>
+
+<!-- ══════════════════════ PART I ══════════════════════ -->
+<div class="part-open" id="p1">
+  <div class="pn">Part One</div>
+  <h2>Orientation</h2>
+  <p>What this program is, why a language from 1959 is a reasonable place to
+     put an AI client, and how to get a first answer out of it.</p>
+</div>
+
+<section class="ch" id="c1">
+  <div class="chnum">Chapter 01</div>
+  <h3>A conversation with a mainframe accent</h3>
+  <p class="lede">COBOL AI CLI is a command-line program written entirely in
+    GnuCOBOL that sends prompts to the Ollama Cloud API and prints the model's
+    answer. You type a question; a language designed for batch payroll runs
+    asks a large language model on your behalf.</p>
+
+  <p>That sentence is the whole product, and it is worth sitting with for a
+    moment, because the joke and the engineering point are the same. COBOL is
+    not a toy here. The program has a persistent response cache, exponential
+    backoff keyed to HTTP status, system-keyring credential storage, per-run
+    file isolation so concurrent sessions cannot collide, and a 79-case test
+    suite that runs offline and costs nothing. Those are the properties you
+    would demand of any production HTTP client. They happen to be implemented
+    in <code>PERFORM VARYING</code> and <code>PIC X(25000)</code>.</p>
+
+  <h4>What it actually does</h4>
+  <ul class="clean">
+    <li><b>One-shot mode</b> — <code>./cobol-ai "What is 2+2?"</code> prints an answer and exits.</li>
+    <li><b>Interactive mode</b> — a prompt loop with history, themes, model switching and file attachment.</li>
+    <li><b>File input</b> — <code>file src/main.cob explain this</code> reads a file into the prompt.</li>
+    <li><b>Transcript capture</b> — <code>output session.md</code> appends every exchange to a file.</li>
+    <li><b>Caching</b> — repeated questions are answered from disk without touching the network.</li>
+  </ul>
+
+  <h4>The shape of the thing</h4>
+  <p>Three executables cooperate. Understanding this split early makes
+    everything later obvious, so it is worth the thirty seconds now.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>File</th><th>Language</th><th>Job</th></tr></thead>
+    <tbody>
+      <tr><td><code>cobol-ai</code></td><td>bash</td>
+          <td>Wrapper. Loads <code>.env</code>, assigns a run id, points the program at the helper. <b>This is the entry point.</b></td></tr>
+      <tr><td><code>cobol-ai.bin</code></td><td>COBOL</td>
+          <td>The program. All logic: parsing, caching, retry, display.</td></tr>
+      <tr><td><code>cobol-ai-helper.sh</code></td><td>bash</td>
+          <td>Performs the actual HTTP request with <code>curl</code>, writes the response and status to files.</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="box"><span class="lbl">Why a helper at all</span>
+    <p>GnuCOBOL has no HTTP client and no way to capture a subprocess's standard
+      output. It can call the shell, and it can read files. So the COBOL side
+      writes a prompt file, invokes the helper, and reads back a response file.
+      Every awkward design decision in this program descends from that one
+      constraint — and once you see it, the architecture reads as inevitable
+      rather than strange.</p></div>
+</section>
+
+<section class="ch" id="c2">
+  <div class="chnum">Chapter 02</div>
+  <h3>Ten minutes of COBOL, for people who have never written any</h3>
+  <p class="lede">You do not need to know COBOL to use this tool. You do need a
+    little to read the rest of this book. Here is the smallest useful amount.</p>
+
+  <p>A COBOL program is divided into four <b>divisions</b>, always in this
+    order. Think of them as: who I am, what I need from the system, what data I
+    hold, and what I do.</p>
+
+  <div class="filename">the shape of every COBOL program</div>
+<pre><code><span class="k">IDENTIFICATION DIVISION</span>.
+<span class="k">PROGRAM-ID</span>. COBOL-AI-CLI.        <span class="c">*&gt; who I am</span>
+
+<span class="k">ENVIRONMENT DIVISION</span>.             <span class="c">*&gt; files I will open</span>
+<span class="k">INPUT-OUTPUT SECTION</span>.
+<span class="k">FILE-CONTROL</span>.
+    <span class="k">SELECT</span> CACHE-FILE <span class="k">ASSIGN TO</span> WS-CACHE-FILE
+        <span class="k">ORGANIZATION IS</span> LINE SEQUENTIAL.
+
+<span class="k">DATA DIVISION</span>.                    <span class="c">*&gt; every variable, declared up front</span>
+<span class="k">WORKING-STORAGE SECTION</span>.
+<span class="n">01</span>  WS-MODEL   <span class="k">PIC</span> X(<span class="n">50</span>) <span class="k">VALUE</span> <span class="s">"gpt-oss:120b"</span>.
+<span class="n">01</span>  WS-RETRIES <span class="k">PIC</span> <span class="n">9</span>(<span class="n">2</span>)  <span class="k">VALUE</span> <span class="n">3</span>.
+
+<span class="k">PROCEDURE DIVISION</span>.               <span class="c">*&gt; the actual work</span>
+MAIN-PROCEDURE.
+    <span class="k">PERFORM</span> INITIALIZE-PROGRAM.
+    <span class="k">STOP RUN</span>.</code></pre>
+
+  <h4>The five ideas you need</h4>
+  <div class="kv">
+    <dt>PIC X(50)</dt><dd>A fixed 50-character text field. Not a string — a <em>box</em>. Short values are padded with spaces on the right, and long ones are silently truncated. This single fact explains several bugs later in the book.</dd>
+    <dt>PIC 9(4)</dt><dd>A four-digit number. <code>9(4)</code> holds 0–9999; assigning 12345 quietly loses the leading digit.</dd>
+    <dt>PERFORM</dt><dd>Call a paragraph and come back. There is no call stack of arguments — everything is shared global state in <code>WORKING-STORAGE</code>.</dd>
+    <dt>Paragraph</dt><dd>A named block of statements, like a function with no parameters and no return value. This program has 65 of them.</dd>
+    <dt>OCCURS n</dt><dd>An array. <code>OCCURS 20 TIMES</code> gives you 20 slots, indexed from <b>1</b>, not 0.</dd>
+  </div>
+
+  <div class="box warn"><span class="lbl">The one to remember</span>
+    <p><b>Fields are fixed-width boxes, and comparisons pad the shorter side
+      with spaces.</b> An 11-character slice compared against a 12-character
+      word can never be equal — the comparison pads the slice to
+      <code>"conversatio&nbsp;"</code> and finds a mismatch. That exact mistake
+      disabled a documented command for months. You will meet it in Chapter 19.</p></div>
+
+  <h4>Reference modification</h4>
+  <p>COBOL's substring syntax is <code>FIELD(start:length)</code>, one-indexed.
+    So <code>WS-PROMPT(6:995)</code> means "995 characters starting at position
+    6". You will see this constantly, because it is how the program parses
+    commands out of a typed line.</p>
+
+  <div class="filename">how "model llama2:7b" gets parsed</div>
+<pre><code><span class="c">*&gt; WS-PROMPT holds "model llama2:7b" padded to 1000 characters</span>
+<span class="k">MOVE</span> <span class="f">FUNCTION TRIM</span>(WS-PROMPT(<span class="n">6</span>:<span class="n">50</span>)) <span class="k">TO</span> WS-TEMP-STRING.
+<span class="c">*&gt; positions 6..55  ->  "llama2:7b"</span></code></pre>
+</section>
+
+<section class="ch" id="c3">
+  <div class="chnum">Chapter 03</div>
+  <h3>Installation, five ways</h3>
+  <p class="lede">Pick the row that matches your situation. All five install the
+    <em>wrapper</em> as the entry point — never the bare binary — for reasons
+    that become clear in Chapter 11.</p>
+
+  <h5>Prerequisites</h5>
+  <div class="tw"><table>
+    <thead><tr><th>Component</th><th>Needed for</th><th>Debian / Ubuntu</th></tr></thead>
+    <tbody>
+      <tr><td>GnuCOBOL 3.1+</td><td>Building from source</td><td><code>apt install gnucobol</code></td></tr>
+      <tr><td>curl</td><td>Every API request</td><td><code>apt install curl</code></td></tr>
+      <tr><td>libsecret-tools</td><td>Optional: keyring credentials</td><td><code>apt install libsecret-tools</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>1 · From source</h4>
+<pre><code>git clone https://github.com/casimirex/cobol-ai-cli.git
+<span class="k">cd</span> cobol-ai-cli
+cp .env.example .env        <span class="c"># then add your API key</span>
+make all
+./cobol-ai <span class="s">"What is 2+2?"</span></code></pre>
+
+  <div class="box"><span class="lbl">Note</span>
+    <p><code>make all</code> produces <code>cobol-ai.bin</code>, which the
+      wrapper runs. The binary is a build artifact and is not committed, so a
+      fresh clone will not work until you build it.</p></div>
+
+  <h4>2 · System-wide</h4>
+<pre><code>sudo make install                  <span class="c"># /usr/local/bin</span>
+make install PREFIX=$HOME/.local   <span class="c"># or somewhere you own</span></code></pre>
+
+  <h4>3 · Debian package</h4>
+<pre><code>make deb
+sudo dpkg -i build/cobol-ai-cli_*.deb</code></pre>
+  <p>The package declares <code>libcob4</code> and <code>curl</code> as
+    dependencies and recommends <code>libsecret-tools</code>. It installs all
+    three executables into <code>/usr/bin</code>.</p>
+
+  <h4>4 · Container</h4>
+<pre><code>make docker
+docker run --rm -e AI_OLLAMA_API_KEY=... cobol-ai-cli <span class="s">"What is 2+2?"</span>
+
+<span class="c"># keep the cache and history between runs</span>
+docker run --rm -v cobol-ai-state:/home/cobol/.local/state \
+    -e AI_OLLAMA_API_KEY=... cobol-ai-cli <span class="s">"your prompt"</span></code></pre>
+  <p>A two-stage build: GnuCOBOL compiles in the first stage, and the runtime
+    image carries only <code>libcob4</code>, <code>curl</code> and the three
+    executables — about 192&nbsp;MB. It runs as an unprivileged user.</p>
+
+  <h4>5 · Source tarball</h4>
+<pre><code>make dist        <span class="c"># build/cobol-ai-cli-1.11.2.tar.gz</span></code></pre>
+  <p>Self-contained: unpack it anywhere, run <code>make all</code> and the full
+    test suite passes from the extracted tree. It deliberately excludes
+    <code>.env</code>.</p>
+
+  <h4>Giving it a key</h4>
+  <p>Three sources, checked in this order:</p>
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Source</th><th>How</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Environment</td><td><code>export AI_OLLAMA_API_KEY=...</code> — also covers anything the wrapper exported from <code>.env</code></td></tr>
+      <tr><td>2</td><td>System keyring</td><td><code>secret-tool store --label='COBOL AI CLI' service cobol-ai-cli key api-key</code></td></tr>
+      <tr><td>3</td><td>Neither</td><td>A clear error naming the <code>secret-tool</code> command</td></tr>
+    </tbody>
+  </table></div>
+  <div class="box warn"><span class="lbl">Ordering gotcha</span>
+    <p>The wrapper exports <code>.env</code> into the environment, so a key left
+      in <code>.env</code> is indistinguishable from one you exported yourself
+      and will win over the keyring. To use the keyring, remove the key from
+      <code>.env</code>.</p></div>
+</section>
+
+<section class="ch" id="c4">
+  <div class="chnum">Chapter 04</div>
+  <h3>Your first conversation</h3>
+  <p class="lede">Here is exactly what the program prints, captured from a real
+    run — not reconstructed from memory.</p>
+
+<pre><code>$ ./cobol-ai <span class="s">"What is 2+2?"</span>
+
++======================================================================+
+|              COBOL AI CLI v1.11.2                                    |
+|                  Powered by Ollama Cloud API                         |
++======================================================================+
+
+[OK] Configuration loaded successfully
+    Model: gpt-oss:120b
+    Theme: dark
+
+[SEND] Sending request to Ollama API...
+| Loading... /
+[RECV] Response received (00303 bytes)
+[OK] Request completed!
+
+======================================================================
+&gt;&gt;&gt; AI Response:
+2 + 2 = 4.
+======================================================================
+
+Session Statistics:
+  Cache Hits:   00000
+  Cache Misses: 00001
+  Hit Rate:     00000%</code></pre>
+
+  <p>Run the identical command again and the middle disappears — no
+    <code>[SEND]</code>, no spinner, no network:</p>
+<pre><code>  [CACHE HIT] Using cached response
+  ...
+  Cache Hits:   00001
+  Hit Rate:     00100%</code></pre>
+
+  <h4>Interactive mode</h4>
+  <p>Run it with no arguments and you get a prompt loop. This is the mode most
+    of the book concerns itself with, because it is where the commands live.</p>
+
+  <figure>
+    <img src="images/interactive-codegen.png" alt="Interactive session generating a COBOL Hello World program, with the banner, status icons and a syntax-highlighted code block">
+    <figcaption><b>Figure 4.1 — Interactive mode, asked to write COBOL.</b>
+      The banner, the <code>[OK]</code> configuration summary, the
+      <code>[SEND]</code> / <code>[RECV]</code> / <code>[OK]</code> status
+      icons, and the response with its fenced code block highlighted in cyan.
+      Note the byte count — <code>02258 bytes</code> — printed before parsing.
+      Captured at v1.5.0; the banner reads differently today, but every element
+      shown is still present.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="images/response-continued.png" alt="Continuation of the same response showing a markdown table of COBOL divisions and highlighted shell commands">
+    <figcaption><b>Figure 4.2 — The same answer, continued.</b> The model's
+      markdown table survives intact, shell commands are highlighted, and the
+      session ends at <code>&gt; Press Enter to continue or exit to quit:</code>
+      — the prompt that separates one exchange from the next. Getting that
+      literal apostrophe in <code>'exit'</code> through the shell safely is
+      Chapter 12's problem.</figcaption>
+  </figure>
+</section>
+
+<!-- ══════════════════════ PART II ══════════════════════ -->
+<div class="part-open" id="p2">
+  <div class="pn">Part Two</div>
+  <h2>Driving it</h2>
+  <p>Every command, every mode, every flag — what it does, what it writes to
+     disk, and where it will surprise you.</p>
+</div>
+
+<section class="ch" id="c5">
+  <div class="chnum">Chapter 05</div>
+  <h3>The command surface</h3>
+  <p class="lede">Fourteen commands. Type <code>help</code> to see them from
+    inside the program.</p>
+
+  <figure>
+    <img src="images/help-command.png" alt="The help command output listing available commands">
+    <figcaption><b>Figure 5.1 — <code>help</code>, as of v1.5.0.</b> A useful
+      historical artifact: this listing predates <code>file</code>,
+      <code>cache clear</code> and <code>version</code>, all of which appear in
+      the table below. It also shows <code>conversation</code> — a command that,
+      at the moment this screenshot was taken, silently did nothing. See
+      Chapter 19.</figcaption>
+  </figure>
+
+  <div class="tw"><table>
+    <thead><tr><th>Command</th><th>Does</th><th>Touches disk?</th></tr></thead>
+    <tbody>
+      <tr><td><code>help</code></td><td>List commands</td><td>—</td></tr>
+      <tr><td><code>version</code></td><td>Version, model, endpoint, state dir, resolved helper path</td><td>—</td></tr>
+      <tr><td><code>history</code></td><td>Show previous prompts</td><td>reads <code>history.txt</code></td></tr>
+      <tr><td><code>clear</code></td><td>Clear the screen</td><td>—</td></tr>
+      <tr><td><code>theme</code></td><td>Show themes</td><td>—</td></tr>
+      <tr><td><code>theme &lt;name&gt;</code></td><td>Switch to <code>dark</code> or <code>light</code></td><td>writes <code>theme.txt</code></td></tr>
+      <tr><td><code>models</code></td><td>List the six known models</td><td>—</td></tr>
+      <tr><td><code>model &lt;name&gt;</code></td><td>Switch model for subsequent requests</td><td>—</td></tr>
+      <tr><td><code>conversation</code> / <code>conv</code></td><td>Show this session's exchanges with timestamps</td><td>—</td></tr>
+      <tr><td><code>export</code></td><td>Write the conversation to a text file</td><td>writes <code>export.txt</code></td></tr>
+      <tr><td><code>output &lt;file&gt;</code></td><td>Append every future exchange to a file</td><td>writes your file</td></tr>
+      <tr><td><code>output</code></td><td>Report the current output file</td><td>—</td></tr>
+      <tr><td><code>output off</code></td><td>Stop appending</td><td>—</td></tr>
+      <tr><td><code>stats</code></td><td>Cache hits, misses, hit rate, error count</td><td>—</td></tr>
+      <tr><td><code>cache clear</code></td><td>Empty the cache in memory and on disk</td><td>deletes <code>cache.dat</code></td></tr>
+      <tr><td><code>file &lt;path&gt; [question]</code></td><td>Attach a file's contents to a question</td><td>reads your file</td></tr>
+      <tr><td><code>exit</code> / <code>quit</code></td><td>Leave, saving the cache</td><td>writes <code>cache.dat</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="box"><span class="lbl">Design note</span>
+    <p>Commands are matched against the typed line before anything is sent to
+      the model. Anything that is <em>not</em> a command becomes a prompt. That
+      is a deliberate trade: it keeps the interface frictionless, but it means a
+      command that fails to match is silently forwarded to the API as a
+      question. Two commands shipped in exactly that broken state, and the only
+      symptom was a slightly confused answer.</p></div>
+</section>
+
+<section class="ch" id="c6">
+  <div class="chnum">Chapter 06</div>
+  <h3>Working with files</h3>
+  <p class="lede">Two independent features that together turn the tool from a
+    chat toy into something usable on real code.</p>
+
+  <h4>File input</h4>
+<pre><code><span class="c"># one-shot</span>
+./cobol-ai <span class="s">"file src/main.cob explain the cache eviction logic"</span>
+
+<span class="c"># interactive</span>
+&gt; file README.md summarise the setup steps
+
+<span class="c"># question is optional</span>
+&gt; file config.json</code></pre>
+
+  <p>The file is read, capped at 10,000 characters, and wrapped into the prompt
+    with explicit delimiters so the model can tell your question from the
+    file:</p>
+<pre><code>explain the cache eviction logic
+
+--- BEGIN FILE: src/main.cob ---
+       IDENTIFICATION DIVISION.
+       ...
+--- END FILE ---</code></pre>
+
+  <ul class="clean">
+    <li>Longer files are <b>truncated with a visible warning</b>, never silently.</li>
+    <li>An unreadable path is reported and <b>no request is made</b>.</li>
+    <li>The attached contents are part of the cache key — the same question about a different file is a different entry.</li>
+  </ul>
+
+  <h4>Output file</h4>
+<pre><code>&gt; output session.md      <span class="c"># start appending</span>
+&gt; output                 <span class="c"># which file am I using?</span>
+&gt; output off             <span class="c"># stop</span></code></pre>
+
+  <p>Each exchange is appended with a timestamp and the model name:</p>
+<pre><code>=== 2026-08-07 13:17:12 | model: gpt-oss:120b ===
+&gt; Name one benefit of COBOL in one short sentence.
+
+COBOL excels at reliably processing massive volumes of business data.</code></pre>
+
+  <div class="box bug"><span class="lbl">Historical note</span>
+    <p>For four releases this command printed <i>"Responses will be saved to
+      this file"</i> and saved nothing — the paragraph behind it was a
+      single <code>CONTINUE</code> statement. Chapter 19.</p></div>
+</section>
+
+<section class="ch" id="c7">
+  <div class="chnum">Chapter 07</div>
+  <h3>Pipes, scripting and exit behaviour</h3>
+  <p class="lede">The tool is usable from scripts, with a couple of sharp edges
+    worth knowing.</p>
+
+<pre><code><span class="c"># pipe a prompt in</span>
+echo <span class="s">"Summarise this"</span> | ./cobol-ai
+
+<span class="c"># drive interactive mode from a heredoc</span>
+printf <span class="s">'What is 2+2?\n\nmodel llama2:7b\nWhat is 3+3?\n\nexit\n'</span> | ./cobol-ai</code></pre>
+
+  <div class="box warn"><span class="lbl">The blank line matters</span>
+    <p>After each answer the program asks <code>Press Enter to continue or exit
+      to quit</code>. When scripting, that prompt consumes a line. If you forget
+      the empty line between prompts, your <em>next question</em> gets eaten as
+      the answer to "press enter" — which looks exactly like the program
+      ignoring your input.</p></div>
+
+  <h4>Concurrency</h4>
+  <p>Two sessions can run at once safely. Each gets a private set of scratch
+    files keyed by a run id, so neither can read the other's prompt or
+    response. This was not always true, and the failure mode was memorable —
+    see Chapter 16.</p>
+</section>
+
+<!-- ══════════════════════ PART III ══════════════════════ -->
+<div class="part-open" id="p3">
+  <div class="pn">Part Three</div>
+  <h2>Inside the machine</h2>
+  <p>How a request actually travels, where every byte of state lives, and why
+     each subsystem is shaped the way it is.</p>
+</div>
+
+<section class="ch" id="c8">
+  <div class="chnum">Chapter 08</div>
+  <h3>Architecture at a glance</h3>
+  <p class="lede">One compilation unit, assembled from eighteen copybooks, driven
+    by a bash wrapper, reaching the network through a bash helper.</p>
+
+  <figure class="svgfig">
+    <svg viewBox="0 0 860 400" role="img" aria-label="Architecture diagram">
+      <defs>
+        <marker id="a" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="var(--cyan)"/></marker>
+        <style>
+          .bx{fill:var(--bg-3);stroke:var(--cyan);stroke-width:1.5;rx:9}
+          .bx2{fill:var(--bg-2);stroke:var(--rule);stroke-width:1.5;rx:9}
+          .t{fill:var(--ink);font:600 14px var(--sans,sans-serif)}
+          .s{fill:var(--ink-dim);font:11px monospace}
+          .ln{stroke:var(--cyan);stroke-width:1.6;fill:none;marker-end:url(#a)}
+          .lb{fill:var(--amber);font:10px monospace}
+        </style>
+      </defs>
+      <rect class="bx" x="20" y="24" width="170" height="62"/>
+      <text class="t" x="36" y="50">You</text><text class="s" x="36" y="68">./cobol-ai "prompt"</text>
+
+      <rect class="bx" x="20" y="140" width="170" height="76"/>
+      <text class="t" x="36" y="166">cobol-ai</text><text class="s" x="36" y="184">bash wrapper</text>
+      <text class="s" x="36" y="200">.env · run id · helper</text>
+
+      <rect class="bx" x="20" y="270" width="170" height="90"/>
+      <text class="t" x="36" y="296">cobol-ai.bin</text><text class="s" x="36" y="314">GnuCOBOL</text>
+      <text class="s" x="36" y="330">cache · retry · parse</text><text class="s" x="36" y="346">display · commands</text>
+
+      <rect class="bx2" x="330" y="270" width="180" height="90"/>
+      <text class="t" x="346" y="296">state directory</text>
+      <text class="s" x="346" y="314">cache.dat history.txt</text>
+      <text class="s" x="346" y="330">theme.txt errors.log</text>
+      <text class="s" x="346" y="346">$XDG_STATE_HOME</text>
+
+      <rect class="bx2" x="330" y="140" width="180" height="76"/>
+      <text class="t" x="346" y="166">scratch files</text>
+      <text class="s" x="346" y="184">prompt · response</text>
+      <text class="s" x="346" y="200">status · key  (per run)</text>
+
+      <rect class="bx" x="640" y="140" width="190" height="76"/>
+      <text class="t" x="656" y="166">cobol-ai-helper.sh</text>
+      <text class="s" x="656" y="184">curl · JSON escape</text>
+      <text class="s" x="656" y="200">HTTP status capture</text>
+
+      <rect class="bx2" x="640" y="24" width="190" height="62"/>
+      <text class="t" x="656" y="50">Ollama Cloud</text><text class="s" x="656" y="68">/api/generate</text>
+
+      <path class="ln" d="M105,88 L105,136"/>
+      <path class="ln" d="M105,218 L105,266"/>
+      <path class="ln" d="M194,312 L326,312"/>
+      <path class="ln" d="M194,300 L326,196"/>
+      <text class="lb" x="200" y="250">writes prompt</text>
+      <path class="ln" d="M514,178 L636,178"/>
+      <text class="lb" x="524" y="170">invokes</text>
+      <path class="ln" d="M735,136 L735,90"/>
+      <text class="lb" x="745" y="118">HTTPS</text>
+      <path class="ln" d="M636,196 L516,196"/>
+      <text class="lb" x="524" y="212">writes response</text>
+    </svg>
+  </figure>
+
+  <h4>Why copybooks</h4>
+  <p><code>main.cob</code> holds only the skeleton — file control entries, the
+    record descriptions, and <code>MAIN-PROCEDURE</code>. Everything else is
+    pulled in with <code>COPY</code> from <code>src/copybooks</code>, split by
+    concern: <code>ws-*.cpy</code> for data, <code>pd-*.cpy</code> for
+    paragraphs.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Copybook</th><th>Holds</th></tr></thead>
+    <tbody>
+      <tr><td><code>ws-config</code></td><td>Credentials, keyring buffers, retry schedule, runtime paths, version</td></tr>
+      <tr><td><code>ws-cache</code></td><td>Cache table, on-disk record layout, hashing state</td></tr>
+      <tr><td><code>ws-errors</code></td><td>Error state and the eight error-code constants</td></tr>
+      <tr><td><code>ws-http</code></td><td>Request/response buffers, JSON scan cursors</td></tr>
+      <tr><td><code>ws-io</code></td><td>Prompt, attached file, pipe capture, output file</td></tr>
+      <tr><td><code>ws-ui</code></td><td>Colours, banner fields, spinner frames, highlighting</td></tr>
+      <tr><td><code>ws-state</code></td><td>Run mode, history, conversation, model table</td></tr>
+      <tr><td><code>pd-config</code></td><td>Path resolution, config loading, validation, keyring lookup</td></tr>
+      <tr><td><code>pd-http</code></td><td>Payload, retry loop, status classification, JSON parsing</td></tr>
+      <tr><td><code>pd-cache</code></td><td>Key building, lookup, storage, persistence, clearing</td></tr>
+      <tr><td><code>pd-fileio</code></td><td>File attachment, prompt composition, output file</td></tr>
+      <tr><td><code>pd-runmode</code></td><td>Pipe/argument detection, the prompt loop, command dispatch</td></tr>
+      <tr><td><code>pd-ui</code></td><td>Banner, themes, help, response rendering, syntax highlighting</td></tr>
+      <tr><td colspan="2" style="color:var(--ink-faint)">…plus <code>pd-errors</code>, <code>pd-history</code>, <code>pd-conversation</code>, <code>pd-models</code>, <code>pd-cleanup</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="box warn"><span class="lbl">Two ordering rules</span>
+    <p><b>1.</b> <code>MAIN-PROCEDURE</code> must stay the first paragraph in the
+      <code>PROCEDURE DIVISION</code> — control falls into whatever comes first,
+      and its <code>STOP RUN</code> is what stops execution running on into the
+      copied paragraphs.<br>
+      <b>2.</b> Everything else is reached by <code>PERFORM</code>, and there is
+      no <code>PERFORM … THRU</code> or <code>GO TO</code> anywhere in the
+      program, so the order of the <code>COPY</code> statements carries no
+      meaning.</p></div>
+
+  <div class="box"><span class="lbl">Honest limitation</span>
+    <p>Copybooks are textual includes. This is file-level organisation, not
+      compilation-unit isolation. True separate modules would mean
+      <code>CALL</code> between programs with all shared state passed through
+      <code>LINKAGE</code> — a rewrite, not a refactor, and of little value for
+      a single-binary CLI.</p></div>
+</section>
+
+<section class="ch" id="c9">
+  <div class="chnum">Chapter 09</div>
+  <h3>Anatomy of a request</h3>
+  <p class="lede">Follow one question from keystroke to printed answer. Fourteen
+    steps, three processes, six files.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>#</th><th>Where</th><th>What happens</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>wrapper</td><td>Source <code>.env</code>, export <code>COBOL_AI_RUN_ID=$$</code> and <code>COBOL_AI_HELPER</code></td></tr>
+      <tr><td>2</td><td>COBOL</td><td><code>INIT-PATHS</code> — resolve state dir, build per-run scratch paths, locate the helper</td></tr>
+      <tr><td>3</td><td>COBOL</td><td>Load config; if no key in the environment, query the keyring</td></tr>
+      <tr><td>4</td><td>COBOL</td><td>Validate: key present and ≥10 chars, URL starts with <code>http</code>, model non-blank</td></tr>
+      <tr><td>5</td><td>COBOL</td><td>Load cache from disk, dropping entries older than 7 days</td></tr>
+      <tr><td>6</td><td>COBOL</td><td><code>COMPOSE-PROMPT</code> — the typed prompt, or question + attached file</td></tr>
+      <tr><td>7</td><td>COBOL</td><td><code>BUILD-CACHE-KEY</code> — hash <code>model|prompt</code>; look it up</td></tr>
+      <tr><td>8</td><td>COBOL</td><td><b>Hit?</b> Print and skip to 13. <b>Miss?</b> Continue.</td></tr>
+      <tr><td>9</td><td>COBOL</td><td>Write the prompt to <code>…-prompt.txt</code>; invoke the helper with the scratch paths in its environment</td></tr>
+      <tr><td>10</td><td>helper</td><td>Resolve key and model, JSON-escape the prompt, <code>curl</code>, record the HTTP status</td></tr>
+      <tr><td>11</td><td>COBOL</td><td>Read the status; parse <code>"response"</code> out of the JSON</td></tr>
+      <tr><td>12</td><td>COBOL</td><td>Failure? Classify the status — retry with backoff, or stop with a reason</td></tr>
+      <tr><td>13</td><td>COBOL</td><td>Clean escape sequences, highlight code fences, print</td></tr>
+      <tr><td>14</td><td>COBOL</td><td>Append to the output file, record in the conversation, delete scratch files</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>The JSON problem</h4>
+  <p>GnuCOBOL has no JSON support, so both directions are hand-rolled. Outbound,
+    the helper escapes the prompt in bash — and the order matters more than it
+    looks:</p>
+
+  <div class="filename">cobol-ai-helper.sh</div>
+<pre><code>json_escape() {
+    <span class="k">local</span> s=<span class="s">"$1"</span>
+    s=<span class="s">"${s//\\/\\\\}"</span>      <span class="c"># backslash FIRST — or it re-escapes its own output</span>
+    s=<span class="s">"${s//\"/\\\"}"</span>
+    s=<span class="s">"${s//$'\t'/\\t}"</span>
+    s=<span class="s">"${s//$'\r'/}"</span>
+    s=<span class="s">"${s//$'\n'/\\n}"</span>
+    printf <span class="s">'%s'</span> <span class="s">"$s"</span>
+}</code></pre>
+
+  <p>Inbound, the COBOL side scans for <code>"response"</code> character by
+    character, tracking escaped quotes so that a <code>\"</code> inside the
+    answer does not terminate the scan early.</p>
+
+  <div class="box"><span class="lbl">Why unicode mostly works</span>
+    <p>The escape-cleaning routine handles only four <code>\u</code> sequences —
+      <code>&lt;</code>, <code>&gt;</code>, <code>&amp;</code> and <code>"</code>.
+      That sounds fragile until you check what the API actually returns: raw
+      UTF-8, not <code>\u</code> escapes. Accented text, em dashes, degree signs
+      and emoji all pass through untouched. Verified, not assumed:
+      <code>it's 5 °C — naïve café 😀</code> round-trips correctly.</p></div>
+</section>
+
+<section class="ch" id="c10">
+  <div class="chnum">Chapter 10</div>
+  <h3>The response cache</h3>
+  <p class="lede">Twenty entries, seven-day expiry, persisted to disk, and the
+    subsystem that taught this project the most about testing.</p>
+
+  <figure class="svgfig">
+    <svg viewBox="0 0 820 210" role="img" aria-label="Cache key construction">
+      <defs><style>
+        .r{fill:var(--bg-3);stroke:var(--cyan);stroke-width:1.4;rx:7}
+        .r2{fill:var(--bg-2);stroke:var(--rule);stroke-width:1.4;rx:7}
+        .tt{fill:var(--ink);font:12px monospace}
+        .ss{fill:var(--ink-dim);font:10.5px monospace}
+        .lab{fill:var(--amber);font:10px monospace}
+      </style></defs>
+      <text class="lab" x="20" y="22">1 · compose</text>
+      <rect class="r" x="20" y="32" width="380" height="34"/>
+      <text class="tt" x="32" y="54">gpt-oss:120b|What is 2 plus 2?</text>
+
+      <text class="lab" x="20" y="98">2 · rolling polynomial hash over the whole key</text>
+      <rect class="r2" x="20" y="108" width="380" height="34"/>
+      <text class="tt" x="32" y="130">acc = (acc × 31 + ORD(c)) mod 999999937</text>
+
+      <text class="lab" x="440" y="22">3 · 64-character fingerprint</text>
+      <rect class="r" x="440" y="32" width="360" height="110"/>
+      <text class="ss" x="452" y="56">000867025479   12 hash digits</text>
+      <text class="ss" x="452" y="78">0030           4 length digits</text>
+      <text class="ss" x="452" y="100">gpt-oss:120b|What is 2 plus…   48 chars</text>
+      <text class="ss" x="452" y="126" fill="var(--green)">control characters replaced with '.'</text>
+
+      <text class="lab" x="20" y="176">4 · record written to cache.dat</text>
+      <rect class="r2" x="20" y="184" width="780" height="20"/>
+      <text class="ss" x="32" y="198">hash(64) + timestamp(14) + valid(1) + response(25000)  =  25079 bytes</text>
+    </svg>
+  </figure>
+
+  <h4>Why a hash at all</h4>
+  <p>The fingerprint field is 64 characters. The model name alone eats 13 of
+    them, so storing a raw prefix meant that two prompts sharing an opening
+    phrase collided. The rolling hash covers the <em>entire</em> key — including
+    an attached file's full contents — while the readable tail is kept purely so
+    a human can eyeball <code>cache.dat</code>.</p>
+
+  <h4>Eviction and expiry</h4>
+  <ul class="clean">
+    <li><b>Full table</b> — entries shift down by one and the newest lands in slot 20.</li>
+    <li><b>Expiry</b> — on load, any entry whose date is more than 7 days old is dropped.</li>
+    <li><b>Corruption</b> — malformed records are skipped; a garbage file yields an empty cache, not a crash.</li>
+    <li><b>Newlines</b> — a response containing a literal newline is never written, because <code>LINE SEQUENTIAL</code> would split the record.</li>
+  </ul>
+
+  <div class="box bug"><span class="lbl">The bug that started everything</span>
+    <p>Both the lookup and the store used <code>WS-CACHE-PROMPT-HASH(1)</code>
+      as scratch space for the current key — but slot 1 is also a real cache
+      entry. The search loop therefore compared slot 1 against itself on its
+      first iteration and always reported a hit. <b>Every prompt after the first
+      received the first prompt's answer.</b> Asking "Name the capital of France"
+      returned "2 + 2 = 4." The non-persistence was masking it: one query per
+      process meant the table was always empty on lookup. Making the cache
+      persistent without fixing this would have shipped wrong answers to
+      everyone.</p></div>
+</section>
+
+<section class="ch" id="c11">
+  <div class="chnum">Chapter 11</div>
+  <h3>Retry, and knowing what went wrong</h3>
+  <p class="lede">Not every failure deserves a second attempt. Telling them
+    apart requires the HTTP status — which for a long time nobody captured.</p>
+
+  <figure class="svgfig">
+    <svg viewBox="0 0 820 250" role="img" aria-label="Retry decision tree">
+      <defs>
+        <marker id="a2" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 z" fill="var(--cyan)"/></marker>
+        <style>
+          .d{fill:var(--bg-3);stroke:var(--cyan);stroke-width:1.4;rx:7}
+          .ok{fill:var(--bg-2);stroke:var(--green);stroke-width:1.4;rx:7}
+          .no{fill:var(--bg-2);stroke:var(--red);stroke-width:1.4;rx:7}
+          .tt2{fill:var(--ink);font:12px monospace}
+          .l2{stroke:var(--cyan);stroke-width:1.5;fill:none;marker-end:url(#a2)}
+          .lb2{fill:var(--amber);font:10px monospace}
+        </style>
+      </defs>
+      <rect class="d" x="16" y="100" width="150" height="44"/>
+      <text class="tt2" x="30" y="127">HTTP status</text>
+
+      <rect class="ok" x="290" y="10" width="220" height="40"/>
+      <text class="tt2" x="304" y="35">200 + parsed → done</text>
+
+      <rect class="d" x="290" y="66" width="220" height="40"/>
+      <text class="tt2" x="304" y="91">429 · 5xx · 000</text>
+      <rect class="d" x="290" y="122" width="220" height="40"/>
+      <text class="tt2" x="304" y="147">200, unusable body</text>
+      <rect class="no" x="290" y="184" width="220" height="46"/>
+      <text class="tt2" x="304" y="205">401 · 403 · 404 · 4xx</text>
+      <text class="tt2" x="304" y="222" fill="var(--red)">stop immediately</text>
+
+      <rect class="d" x="590" y="90" width="212" height="52"/>
+      <text class="tt2" x="604" y="112">retry: 1s → 2s → 4s</text>
+      <text class="tt2" x="604" y="130" fill="var(--ink-dim)">max 3, cap 30s</text>
+
+      <path class="l2" d="M170,112 L286,34"/>
+      <path class="l2" d="M170,120 L286,86"/>
+      <path class="l2" d="M170,126 L286,142"/>
+      <path class="l2" d="M170,134 L286,200"/>
+      <path class="l2" d="M514,90 L586,110"/>
+      <path class="l2" d="M514,140 L586,124"/>
+    </svg>
+  </figure>
+
+  <p>A wrong API key used to cost four attempts and roughly seven seconds of
+    backoff before reporting the useless message <i>"All retry attempts
+    exhausted"</i>. Today:</p>
+<pre><code>[SEND] Sending request to Ollama API...
+ERROR: API returned HTTP 401
+[ERR] Request failed, not retrying
+  HTTP 401 unauthorized - check AI_OLLAMA_API_KEY
+
+elapsed: 0s</code></pre>
+
+  <div class="box bug"><span class="lbl">Backoff that never waited</span>
+    <p>The sleep command was built with <code>STRING "sleep " … INTO
+      WS-HELPER-CMD</code> — and <code>STRING</code> overwrites from position 1
+      while leaving the rest of the field intact. The result was
+      <code>sleep&nbsp;1</code> followed by the tail of the previous API
+      command, including an unbalanced quote. The shell rejected the whole thing
+      and <b>no wait ever happened</b>. Measured: three retries in 0 seconds.
+      Against a real rate limit that is hammering the endpoint as fast as the
+      loop runs — precisely what backoff exists to prevent. The existing tests
+      could never have caught it: they counted attempts, which were always
+      correct. Only elapsed time reveals it.</p></div>
+</section>
+
+<section class="ch" id="c12">
+  <div class="chnum">Chapter 12</div>
+  <h3>Credentials, quoting and the shell boundary</h3>
+  <p class="lede">Every character that crosses from user input into a shell
+    command is a place to be careful. This program has exactly one such path,
+    and two barriers guarding it.</p>
+
+  <h4>Where the key comes from</h4>
+  <p>Both the COBOL program and the helper consult the same sources in the same
+    order. That symmetry matters: implementing keyring support only in the COBOL
+    side would have lit up the banner while the request still failed for want of
+    a key.</p>
+<pre><code><span class="c"># store once</span>
+secret-tool store --label=<span class="s">'COBOL AI CLI'</span> service cobol-ai-cli key api-key
+
+<span class="c"># then remove AI_OLLAMA_API_KEY from .env, or it will keep winning</span></code></pre>
+
+  <div class="box warn"><span class="lbl">A small compromise, stated plainly</span>
+    <p>COBOL cannot capture a subprocess's output, so its keyring lookup passes
+      through a temporary file — created under <code>umask 077</code> and
+      deleted immediately after reading. That is a brief single-user-readable
+      window on disk. The bash helper reads the keyring directly with no temp
+      file. The asymmetry is a real cost of the language, not an oversight.</p></div>
+
+  <h4>The one injection surface</h4>
+  <p>The model name is the only user-controlled value that reaches a shell
+    command string, where it sits inside single quotes. Two barriers stand in
+    front of it:</p>
+  <ol class="body">
+    <li><b>Character rejection</b> — any name containing <code>' ; ` $ &amp; |</code> is refused outright.</li>
+    <li><b>Whitelist</b> — the name must match one of six known models.</li>
+  </ol>
+
+  <div class="box bug"><span class="lbl">How nearly the test was worthless</span>
+    <p>The first injection probe used a marker path under the test directory,
+      which made the payload longer than <code>WS-MODEL</code>'s
+      <code>PIC X(50)</code>. It was truncated into harmlessness and the test
+      passed <em>without exercising anything</em>. With a short payload and the
+      whitelist removed, <code>model x';touch /tmp/IJ2;echo '</code> executes.
+      The whitelist was doing all the work; the test was doing none. Both are
+      fixed — and this is why the book keeps insisting on mutation checks.</p></div>
+</section>
+
+<section class="ch" id="c13">
+  <div class="chnum">Chapter 13</div>
+  <h3>Where your state lives</h3>
+  <p class="lede">Persistent things survive reboots and belong to you. Scratch
+    things belong to a single request and disappear with it.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>File</th><th>Location</th><th>Lifetime</th></tr></thead>
+    <tbody>
+      <tr><td><code>cache.dat</code></td><td rowspan="5"><code>$XDG_STATE_HOME/cobol-ai-cli</code><br>or <code>~/.local/state/cobol-ai-cli</code><br><span style="color:var(--ink-faint)">created 0700</span></td><td>7-day entries</td></tr>
+      <tr><td><code>history.txt</code></td><td>Persistent</td></tr>
+      <tr><td><code>theme.txt</code></td><td>Persistent</td></tr>
+      <tr><td><code>errors.log</code></td><td>Appended forever</td></tr>
+      <tr><td><code>export.txt</code></td><td>Overwritten by <code>export</code></td></tr>
+      <tr><td><code>…-prompt.txt</code></td><td rowspan="4"><code>/tmp/cobol-ai-&lt;runid&gt;-*</code></td><td rowspan="4">One request</td></tr>
+      <tr><td><code>…-response.json</code></td></tr>
+      <tr><td><code>…-status.txt</code></td></tr>
+      <tr><td><code>…-key.txt</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p>The run id comes from the wrapper's shell PID. Invoke the binary directly
+    and it derives one from the clock plus a random suffix, so isolation does
+    not depend on going through the wrapper.</p>
+
+  <div class="box bug"><span class="lbl">Reproduced before it was fixed</span>
+    <p>Every file once had a fixed name. Two overlapping sessions therefore
+      shared one prompt file and one response file:</p>
+<pre><code>run A asked: ALPHA-QUESTION
+run A got:   ECHO[BETA-QUESTION]     ← run B's answer</code></pre>
+    <p>Nothing in the output suggested anything was wrong. It reads as a normal
+      answer to a different question. On a shared machine the same fault locked
+      out every user but the first — most cruelly for the key file at mode 0600,
+      where a second user's keyring lookup failed to write, silently produced an
+      empty key, and reported <i>"AI_OLLAMA_API_KEY not set"</i> while their key
+      sat safely in the keyring.</p></div>
+</section>
+
+<!-- ══════════════════════ PART IV ══════════════════════ -->
+<div class="part-open" id="p4">
+  <div class="pn">Part Four</div>
+  <h2>The craft</h2>
+  <p>How this program came to be trustworthy, and the sixteen defects that
+     taught it. This is the part worth reading even if you never run COBOL.</p>
+</div>
+
+<section class="ch" id="c14">
+  <div class="chnum">Chapter 14</div>
+  <h3>A test suite that can actually fail</h3>
+  <p class="lede">The suite began as six tests, five of which were
+    <code>echo</code> statements that passed unconditionally. It reported green
+    throughout the period the cache was returning other people's answers.</p>
+
+  <div class="filename">the original "test suite"</div>
+<pre><code>run_test <span class="s">"config-module"</span> <span class="s">"echo 'Testing configuration loading...'"</span></code></pre>
+
+  <p>A sixth checked <code>$?</code> after a command substitution, so it could
+    never fail either. Today there are 79 tests, and three properties make them
+    worth having.</p>
+
+  <h4>1 · Hermetic and free</h4>
+  <p>The whole suite runs offline and costs nothing. A fake API key, a base URL
+    pointing at a dead port, and — critically — the file-backed cache, which
+    lets a seeded <code>cache.dat</code> answer queries with no network at all.
+    Cache-<em>miss</em> paths run the CLI from a directory containing a stub
+    <code>cobol-ai-helper.sh</code>, since the program invokes the helper by
+    relative path. <code>XDG_STATE_HOME</code> is redirected into
+    <code>test-output/</code>, so a run never touches your real cache or
+    history.</p>
+
+  <h4>2 · Assertions on behaviour, not shape</h4>
+  <p>An early test verified that the selected model reached the request by
+    grepping the <em>source</em> for a string. It passed while the feature was
+    broken, because the same string appeared on an unrelated line. Replaced with
+    a stub helper that records what it actually received.</p>
+
+  <h4>3 · Every test is mutation-checked</h4>
+  <p>This is the discipline that makes the rest mean anything. For each fix, the
+    bug is deliberately reintroduced and the suite must fail — and fail on the
+    test that claims to cover it.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Mutation</th><th>Tests that failed</th></tr></thead>
+    <tbody>
+      <tr><td>Restore the slot-1 cache aliasing</td><td>false-hit, prefix-collision</td></tr>
+      <tr><td>Remove the cache load at startup</td><td>4 cache tests</td></tr>
+      <tr><td>Remove the TTL check</td><td>expiry</td></tr>
+      <tr><td>Helper re-sources <code>.env</code></td><td>environment-precedence</td></tr>
+      <tr><td>Stop forwarding the model</td><td>model-command</td></tr>
+      <tr><td>Un-clear the sleep buffer</td><td>backoff timing</td></tr>
+      <tr><td><code>LOG-ERROR</code> writes to the history file</td><td>history preservation</td></tr>
+      <tr><td>Helper path back to CWD-relative</td><td>both installation tests</td></tr>
+      <tr><td>Restore the 5-vs-6 model loop</td><td>every-advertised-model</td></tr>
+      <tr><td>Remove both injection barriers</td><td>injection, unknown-model</td></tr>
+      <tr><td>Drop the helper from the <code>.deb</code></td><td>deb contents</td></tr>
+      <tr><td>Ship <code>.env</code> in the tarball</td><td>secrets</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="box win"><span class="lbl">The test that caught its author</span>
+    <p>Two new tests asserted on the <em>previous</em> test's log. Because
+      <code>begin_test</code> reassigns the log path, they read a file that did
+      not exist — and one <b>passed spuriously</b>, since the failing
+      <code>grep</code> returned non-zero straight into the <code>else</code>
+      branch. The exact always-green failure mode this whole effort set out to
+      eliminate, reproduced by the person eliminating it. Mutation testing is
+      what surfaced it.</p></div>
+</section>
+
+<section class="ch" id="c15">
+  <div class="chnum">Chapter 15</div>
+  <h3>A gallery of sixteen real defects</h3>
+  <p class="lede">Every one of these shipped. Every one was found by asking a
+    question nobody had asked before. Read them as a checklist for your own
+    code.</p>
+
+  <h4>Class one — the comparison that cannot be true</h4>
+  <p>COBOL pads the shorter operand. Three separate bugs, one root cause.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Where</th><th>Wrote</th><th>Consequence</th></tr></thead>
+    <tbody>
+      <tr><td><code>conversation</code> dispatch</td><td><code>(1:11) = "conversation"</code></td><td>12-char word vs 11-char slice — the documented command was sent to the API as a question</td></tr>
+      <tr><td>Model validation</td><td><code>UNTIL WS-JSON-I &gt; 5</code></td><td>Table holds 6 — <code>llama3:2b</code> was advertised by <code>models</code> and rejected by <code>model</code></td></tr>
+      <tr><td>Backoff schedule</td><td><code>2 ** WS-CURRENT-RETRY</code></td><td>Counter already 1, giving 2/4/8s instead of the documented 1/2/4</td></tr>
+    </tbody>
+  </table></div>
+  <p><span class="tag fix">Fixed</span> Bounds now reference declared sizes;
+    comparisons use <code>FUNCTION TRIM</code>. A sweep confirmed no others
+    remain — and the scanner was validated against planted canaries first,
+    so "no results" means something.</p>
+
+  <hr class="sep">
+
+  <h4>Class two — declared but never wired</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Feature</th><th>Reality</th></tr></thead>
+    <tbody>
+      <tr><td><code>output &lt;file&gt;</code></td><td><code>WRITE-TO-OUTPUT-FILE</code> was a <code>CONTINUE</code> stub. Printed "Responses will be saved" and saved nothing.</td></tr>
+      <tr><td>Keyring credentials</td><td><code>LOAD-ENCRYPTED-CREDENTIALS</code> set a flag to <code>"N"</code> and returned. The README advertised keyring storage; the banner had an "(encrypted credentials)" branch on a condition that could never be true.</td></tr>
+      <tr><td><code>version</code></td><td>An 88-level constant with no dispatch. Typing it sent "version" to the model.</td></tr>
+      <tr><td>HTTP status</td><td><code>WS-LAST-HTTP-STATUS</code> had exactly one reference in 1,700 lines: its own declaration.</td></tr>
+    </tbody>
+  </table></div>
+  <p><span class="tag fix">Fixed</span> All four implemented. A test now asserts
+    every declared command constant is dispatched somewhere.</p>
+
+  <hr class="sep">
+
+  <h4>Class three — the buffer that was never cleared</h4>
+  <p><code>STRING … INTO</code> overwrites from position 1 and leaves the rest of
+    the field untouched. Used on a field that still holds a longer previous
+    value, the tail survives.</p>
+  <p><span class="tag sev">Severe</span> The retry <code>sleep</code> inherited
+    the tail of the previous API command, including an unbalanced quote. Backoff
+    silently never ran.
+    <span class="tag fix">Fixed</span> A sweep of every <code>STRING … INTO</code>
+    site found the rest to be latent rather than active — the export loop clears
+    its record each iteration — so they were left alone rather than churned.</p>
+
+  <hr class="sep">
+
+  <h4>Class four — the wrong file</h4>
+  <p><code>LOG-ERROR</code> opened the <b>command-history file</b> with
+    <code>OPEN OUTPUT</code>, which truncates. A single API error replaced your
+    saved history with error text:</p>
+<pre><code>before:              after one 401:
+question one         ERROR [2026080715063560+05]
+question two         Code:   - HTTP 401 unauthorized...</code></pre>
+  <p>Startup errors were harmless only because the filename variable is still
+    blank that early — which is exactly why it went unnoticed for so long.
+    <span class="tag fix">Fixed</span> Errors append to their own
+    <code>errors.log</code>.</p>
+
+  <hr class="sep">
+
+  <h4>Class five — environment and path assumptions</h4>
+  <ul class="clean">
+    <li><b>The helper re-sourced <code>.env</code> on every call</b>, overriding the caller. No setting could be changed at runtime — which is why <code>model &lt;name&gt;</code> changed the banner and the cache key but never the actual request.</li>
+    <li><b>The helper was invoked as <code>./cobol-ai-helper.sh</code></b>, relative to the working directory. <code>make install</code> therefore produced an installation that failed every request from any directory but the repo root.</li>
+    <li><b>Fixed <code>/tmp</code> filenames</b> let concurrent runs trade answers and locked out every user but the first.</li>
+    <li><b>Invalid JSON</b> — the helper escaped <code>"</code> but not backslashes and left raw newlines in the payload, so any multi-line prompt produced a malformed request.</li>
+  </ul>
+
+  <hr class="sep">
+
+  <h4>Class six — documentation that drifted</h4>
+  <ul class="clean">
+    <li>The banner reported <b>v1.8.0 for four releases</b> — the copybook refactor moved it, and version bumps kept editing the old location.</li>
+    <li>The README's "Sample Output" showed a <b>v1.0.0 banner and an <code>AI:</code> prefix that appears nowhere in the source</b>.</li>
+    <li>Screenshot captions described the wrong modes entirely — written without opening the images.</li>
+  </ul>
+  <p><span class="tag fix">Fixed</span> One version constant, read by both the
+    banner and the <code>version</code> command, with a test asserting they
+    agree.</p>
+
+  <div class="box"><span class="lbl">The pattern</span>
+    <p>Sixteen defects, and not one was found by reading code looking for bugs.
+      Every single one surfaced from asking a <em>new kind of question</em>:
+      does the cache return the right thing? do the tests test? does the model
+      reach the request? does install work? what does concurrency do? what does
+      the banner say? When a question stops finding bugs, change the question —
+      not the effort.</p></div>
+</section>
+
+<section class="ch" id="c16">
+  <div class="chnum">Chapter 16</div>
+  <h3>Changing this program safely</h3>
+  <p class="lede">A short procedure, earned the hard way.</p>
+  <ol class="body">
+    <li><b>Run the suite first.</b> Know it was green before you touched anything.</li>
+    <li><b>Write the failing test before the fix.</b> If you cannot make it fail, you do not yet understand the bug.</li>
+    <li><b>Assert on behaviour, not source text.</b> Grepping the source for a string is not a test.</li>
+    <li><b>Mutate to verify.</b> Reintroduce the bug; confirm the right test fails. Skip this and you may have written another <code>echo</code>.</li>
+    <li><b>Check the timing, not just the count.</b> The backoff bug hid behind a correct attempt count for four releases.</li>
+    <li><b>Update the docs in the same commit.</b> Every drift in this book began as a fix that did not.</li>
+  </ol>
+
+  <div class="filename">the loop</div>
+<pre><code>make all                    <span class="c"># build (needs -I src/copybooks; the Makefile does it)</span>
+./tests/test-runner.sh      <span class="c"># 79 tests, offline, ~2 minutes</span>
+make lint                   <span class="c"># syntax check only</span>
+make version                <span class="c"># what the binaries will report</span></code></pre>
+
+  <div class="box warn"><span class="lbl">Still missing</span>
+    <p>There is no CI. Seventy-nine mutation-checked tests run only when someone
+      remembers to run them — and the recurring failure mode in this codebase is
+      documented behaviour silently ceasing to work. The suite needs no secrets,
+      so a workflow would be straightforward. It is the most valuable unbuilt
+      thing in the project.</p></div>
+</section>
+
+<!-- ══════════════════════ PART V ══════════════════════ -->
+<div class="part-open" id="p5">
+  <div class="pn">Part Five</div>
+  <h2>Reference</h2>
+  <p>The tables you will actually come back for.</p>
+</div>
+
+<section class="ch" id="c17">
+  <div class="chnum">Chapter 17</div>
+  <h3>Environment, errors and targets</h3>
+
+  <h4>Environment variables</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Variable</th><th>Purpose</th><th>Default</th></tr></thead>
+    <tbody>
+      <tr><td><code>AI_OLLAMA_API_KEY</code></td><td>Credential</td><td><i>required</i></td></tr>
+      <tr><td><code>AI_OLLAMA_BASE_URL</code></td><td>API endpoint</td><td><code>https://ollama.com</code></td></tr>
+      <tr><td><code>AI_OLLAMA_DEFAULT_MODEL</code></td><td>Model</td><td><code>gpt-oss:120b</code></td></tr>
+      <tr><td><code>AI_OLLAMA_TIMEOUT</code></td><td>Request timeout (ms)</td><td><code>60000</code></td></tr>
+      <tr><td><code>XDG_STATE_HOME</code></td><td>Where persistent state lives</td><td><code>~/.local/state</code></td></tr>
+      <tr><td><code>COBOL_AI_RUN_ID</code></td><td>Scratch-file suffix</td><td>wrapper's PID</td></tr>
+      <tr><td><code>COBOL_AI_HELPER</code></td><td>Explicit helper path</td><td>beside the wrapper</td></tr>
+      <tr><td><code>COBOL_AI_RESPONSE_FILE</code></td><td>Where the helper writes the body</td><td>per-run scratch</td></tr>
+      <tr><td><code>COBOL_AI_STATUS_FILE</code></td><td>Where the helper writes the status</td><td>per-run scratch</td></tr>
+      <tr><td><code>COBOL_AI_HELPER_DRY_RUN</code></td><td><code>1</code> resolves config and makes no request</td><td>unset</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Error codes</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Code</th><th>Name</th><th>Typical cause</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td><code>ERR-OK</code></td><td>—</td></tr>
+      <tr><td>1</td><td><code>ERR-INVALID-CONFIG</code></td><td>Missing/short key, bad URL, 401/403/404</td></tr>
+      <tr><td>2</td><td><code>ERR-NETWORK</code></td><td>DNS, refused, timeout (status 000)</td></tr>
+      <tr><td>3</td><td><code>ERR-API</code></td><td>429, 5xx, other 4xx</td></tr>
+      <tr><td>4</td><td><code>ERR-PARSE</code></td><td>200 with no usable body</td></tr>
+      <tr><td>5</td><td><code>ERR-CACHE</code></td><td>Cache I/O</td></tr>
+      <tr><td>6</td><td><code>ERR-TIMEOUT</code></td><td>Request exceeded the timeout</td></tr>
+      <tr><td>7</td><td><code>ERR-RETRY-EXHAUSTED</code></td><td>All retryable attempts used</td></tr>
+      <tr><td>8</td><td><code>ERR-FILE-IO</code></td><td>Prompt/output file could not be written</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Make targets</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Target</th><th>Does</th></tr></thead>
+    <tbody>
+      <tr><td><code>all</code></td><td>Build <code>bin/cobol-ai-cli</code> and <code>cobol-ai.bin</code></td></tr>
+      <tr><td><code>test</code></td><td>Build, then run all 79 tests</td></tr>
+      <tr><td><code>lint</code></td><td>Syntax check only</td></tr>
+      <tr><td><code>debug</code></td><td>Build with <code>-g</code></td></tr>
+      <tr><td><code>version</code></td><td>Print the version from <code>WS-VERSION</code></td></tr>
+      <tr><td><code>install</code> / <code>uninstall</code></td><td>Honours <code>PREFIX</code>, default <code>/usr/local</code></td></tr>
+      <tr><td><code>deb</code> · <code>docker</code> · <code>dist</code></td><td>Package, image, source tarball</td></tr>
+      <tr><td><code>clean</code></td><td>Remove binaries, <code>build/</code>, C intermediates</td></tr>
+    </tbody>
+  </table></div>
+
+  <h4>Troubleshooting</h4>
+  <div class="tw"><table>
+    <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td><code>AI_OLLAMA_API_KEY not set</code></td><td>No key anywhere</td><td>Set the variable or store it in the keyring</td></tr>
+      <tr><td><code>cobol-ai.bin: No such file</code></td><td>Never built, or <code>make clean</code> ran</td><td><code>make all</code></td></tr>
+      <tr><td><code>./cobol-ai-helper.sh: not found</code></td><td>Bare binary run from elsewhere</td><td>Use the wrapper, or set <code>COBOL_AI_HELPER</code></td></tr>
+      <tr><td><code>HTTP 401 unauthorized</code></td><td>Bad key</td><td>Check it; the program will not retry this</td></tr>
+      <tr><td>Cache hit rate stuck at 0%</td><td>Prompts differ, or model changed</td><td>The model is part of the key</td></tr>
+      <tr><td>Answer to the wrong question</td><td>Pre-v1.5.1 cache</td><td>Upgrade, then <code>cache clear</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="ch" id="c18">
+  <div class="chnum">Chapter 18</div>
+  <h3>Afterword: what a joke project taught</h3>
+  <p class="lede">An AI client in COBOL is funny for about ten seconds. What
+    remains after that is a small, ordinary program with the same problems every
+    program has — and a record of how they were found.</p>
+
+  <p>The defects in Chapter 15 are not COBOL defects. A cache that returns the
+    wrong entry, a retry loop that never sleeps, an error handler that truncates
+    the wrong file, an installer that produces something that cannot run, a test
+    suite that passes unconditionally, documentation describing a version four
+    releases old — you have met all of these in other languages, and you will
+    meet them again.</p>
+
+  <p>What is unusual is only that they were all found, one after another, by
+    refusing to accept that a feature worked because it was documented as
+    working. The cache said "20-entry cache" and returned other people's
+    answers. The README said "keyring storage" and the paragraph was three lines
+    that did nothing. <code>make install</code> said "Installation complete" and
+    produced something broken from every directory on the machine.</p>
+
+  <p>The habit worth taking from this book is not COBOL, and not even testing.
+    It is this: <b>when something claims to work, make it prove it — with a
+    measurement that would look different if the claim were false.</b> Count the
+    seconds, not the attempts. Read the file, not the message. Run the installer,
+    do not inspect it. Open the screenshot before writing its caption.</p>
+
+  <p style="color:var(--ink-dim)">The program still has no CI, its export command
+    only writes text despite constants suggesting otherwise, and a handful of
+    declarations remain that nothing reads. Those are written down rather than
+    quietly omitted, because a book that only lists victories is the same kind
+    of claim as a test that only passes.</p>
+
+  <div class="end">
+    COBOL AI CLI · v1.11.2 · 2,673 lines · 79 tests<br>
+    Every figure and measurement here came from the running program.
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  /* ── build TOC from the document ── */
+  var parts=[],list=document.getElementById('toclist');
+  document.querySelectorAll('.part-open, section.ch').forEach(function(el){
+    if(el.classList.contains('part-open')){
+      var li=document.createElement('li');
+      li.className='part';
+      li.textContent=el.querySelector('h2').textContent;
+      list.appendChild(li);
+    }else{
+      var num=el.querySelector('.chnum').textContent.replace('Chapter ','');
+      var t=el.querySelector('h3').textContent;
+      var li2=document.createElement('li');
+      li2.innerHTML='<a href="#'+el.id+'"><span class="n">'+num+'</span>'+t+'</a>';
+      list.appendChild(li2);
+    }
+  });
+
+  var links=[].slice.call(list.querySelectorAll('a'));
+  var secs=[].slice.call(document.querySelectorAll('section.ch'));
+
+  /* ── scroll spy + progress ── */
+  var bar=document.getElementById('bar');
+  function onScroll(){
+    var h=document.documentElement;
+    var pct=h.scrollTop/(h.scrollHeight-h.clientHeight)*100;
+    bar.style.width=Math.min(100,Math.max(0,pct))+'%';
+    var cur=null;
+    secs.forEach(function(s){ if(s.getBoundingClientRect().top<180) cur=s.id; });
+    links.forEach(function(a){
+      a.classList.toggle('on', a.getAttribute('href')==='#'+cur);
+    });
+  }
+  document.addEventListener('scroll',onScroll,{passive:true});
+  onScroll();
+
+  /* ── TOC filter ── */
+  document.getElementById('filter').addEventListener('input',function(e){
+    var q=e.target.value.toLowerCase();
+    links.forEach(function(a){
+      a.parentElement.style.display = a.textContent.toLowerCase().indexOf(q)>-1?'':'none';
+    });
+  });
+
+  /* ── theme ── */
+  var root=document.documentElement;
+  var saved=null;
+  try{ saved=localStorage.getItem('cai-theme'); }catch(e){}
+  if(saved) root.setAttribute('data-theme',saved);
+  document.getElementById('theme').addEventListener('click',function(){
+    var next=root.getAttribute('data-theme')==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem('cai-theme',next); }catch(e){}
+  });
+  document.getElementById('top').addEventListener('click',function(){
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+
+  /* ── lightbox ── */
+  var lb=document.getElementById('lb'), lbi=lb.querySelector('img');
+  document.querySelectorAll('figure img').forEach(function(img){
+    img.addEventListener('click',function(){ lbi.src=img.src; lb.classList.add('on'); });
+  });
+  lb.addEventListener('click',function(){ lb.classList.remove('on'); });
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape') lb.classList.remove('on');
+    if(e.target.id==='filter') return;
+    if(e.key==='j'||e.key==='k'){
+      var i=secs.findIndex(function(s){return s.getBoundingClientRect().top>10;});
+      if(e.key==='k') i=i-2;
+      var t=secs[Math.max(0,Math.min(secs.length-1,i))];
+      if(t) t.scrollIntoView({behavior:'smooth'});
+    }
+  });
+})();
+</script>
+</body>
+</html>

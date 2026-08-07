@@ -32,6 +32,16 @@
 
 ---
 
+## The Book
+
+A complete field guide — installation through internals, every command, all
+sixteen defects found and fixed, and the testing discipline behind them:
+
+**[`ebook/index.html`](ebook/index.html)** — open it in any browser. Self-contained,
+no build step, light and dark themes.
+
+---
+
 ## Overview
 
 COBOL AI CLI is a command-line interface that enables COBOL applications to interact with the Ollama Cloud API. It bridges the gap between legacy COBOL systems and modern AI capabilities, allowing you to send prompts and receive AI-generated responses directly from your terminal or COBOL applications.

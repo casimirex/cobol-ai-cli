@@ -61,7 +61,7 @@ dist:
 	@echo "Creating $(DIST_NAME).tar.gz..."
 	@rm -rf build/$(DIST_NAME)
 	@mkdir -p build/$(DIST_NAME)
-	@cp -r src tests packaging Makefile Dockerfile .dockerignore \
+	@cp -r src tests packaging ebook Makefile Dockerfile .dockerignore \
 	      cobol-ai cobol-ai-helper.sh run-test.sh README.md .env.example \
 	      build/$(DIST_NAME)/
 	@tar -czf build/$(DIST_NAME).tar.gz -C build $(DIST_NAME)
