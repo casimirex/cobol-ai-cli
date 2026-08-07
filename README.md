@@ -412,7 +412,13 @@ For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 make test
 ```
 
-### Run Specific Test
+The suite runs **offline and costs nothing**. Because the response cache is
+file-backed, seeding `/tmp/cobol-ai-cache.dat` lets the program answer from
+cache without calling the API, and cache-miss paths are covered by running the
+CLI from a directory containing a stub `cobol-ai-helper.sh`. No API key is
+needed — the tests export a fake one and point the base URL at a dead port.
+
+### Manual smoke test
 
 ```bash
 ./run-test.sh "Test prompt"
@@ -420,12 +426,18 @@ make test
 
 ### Test Categories
 
-| Test | Description |
-|------|-------------|
-| Build Verification | Check binary compilation |
-| Environment Loading | Verify `.env` parsing |
-| API Connectivity | Test API connection |
-| CLI Execution | End-to-end testing |
+| Group | Covers |
+|-------|--------|
+| Build artifacts | Both binaries build; the wrapper execs `cobol-ai.bin` and not itself |
+| Configuration validation | Missing, short, and malformed config is rejected |
+| Interactive commands | `help` lists documented commands; `stats` reports cache state |
+| Response cache | Cross-process hits, false-hit and prefix-collision regressions, hit/miss counters, TTL expiry, table limit, corrupt files, `cache clear` |
+| Helper script | Caller environment wins over `.env`; model argument precedence |
+| Cache miss path | Helper invocation, response caching, model forwarding, eviction at the table limit |
+
+Every test asserts on real program output. The suite was validated by
+mutation: each regression test was confirmed to fail when the bug it describes
+is reintroduced into the source.
 
 ---
 
@@ -532,7 +544,23 @@ source .env
 
 ## Changelog
 
-### v1.5.1 (Cache Correctness & Persistence) - Latest
+### v1.5.2 (Real Test Suite) - Latest
+- **Replaced the placeholder test suite**: five of the six previous "tests" were
+  `echo` statements that passed unconditionally, so `make test` reported green
+  while the cache was returning wrong answers. 22 behavioural tests now assert on
+  real program output, run offline, and cost nothing.
+- **Fixed `.env` overriding the caller**: `cobol-ai-helper.sh` re-sourced `.env`
+  on every call, so no setting could be changed at runtime.
+- **Fixed `model <name>` being cosmetic**: the helper built its own payload from
+  `.env`, so switching models changed the banner and the cache key but never the
+  actual request. The selected model is now passed through to the helper.
+- **`make all` builds `cobol-ai.bin`**: previously only `bin/cobol-ai-cli` was
+  built by the Makefile while the wrapper ran a separately-compiled binary, so
+  the two could drift and the tests checked the wrong artifact.
+- **Added `COBOL_AI_HELPER_DRY_RUN=1`**: reports resolved config and makes no
+  network call.
+
+### v1.5.1 (Cache Correctness & Persistence)
 - **Fixed wrong cached answers**: the lookup key was written into cache slot 1, which is
   also a real entry, so every lookup compared slot 1 against itself and returned a hit.
   Any prompt after the first got the first prompt's answer. The key now lives in

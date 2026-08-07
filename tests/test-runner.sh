@@ -1,215 +1,412 @@
 #!/bin/bash
 # COBOL AI CLI - Test Runner
-# Runs all unit and integration tests
-
-set -e
+#
+# Behavioural tests for the compiled CLI. Every test below asserts on real
+# program output; none of them pass unconditionally.
+#
+# The suite runs OFFLINE and costs nothing: the response cache is file
+# backed, so seeding /tmp/cobol-ai-cache.dat lets the program answer from
+# cache without ever calling the API. Tests that must exercise a cache MISS
+# point the base URL at a dead local port so the request fails immediately
+# instead of reaching the real endpoint with real credentials.
+#
+# Usage: ./tests/test-runner.sh          (or: make test)
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Test counters
 TESTS_RUN=0
 TESTS_PASSED=0
 TESTS_FAILED=0
+FAILED_NAMES=()
 
 # Directory setup
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BIN_DIR="$PROJECT_ROOT/bin"
 TEST_OUTPUT="$PROJECT_ROOT/test-output"
+CLI="$PROJECT_ROOT/cobol-ai.bin"
+CACHE_FILE="/tmp/cobol-ai-cache.dat"
 
-# Create test output directory
 mkdir -p "$TEST_OUTPUT"
+cd "$PROJECT_ROOT" || exit 1
 
+# ---------------------------------------------------------------------------
+# Test environment
+#
+# Deliberately fake. The API key only has to survive the program's own
+# validation (>= 10 chars); nothing here can reach a real endpoint. The model
+# is pinned so cache keys are deterministic across machines.
+# ---------------------------------------------------------------------------
+export AI_OLLAMA_API_KEY="test-key-0123456789"
+export AI_OLLAMA_BASE_URL="http://127.0.0.1:1"
+export AI_OLLAMA_DEFAULT_MODEL="test-model"
+export AI_OLLAMA_TIMEOUT="2000"
+TEST_MODEL="test-model"
+
+# ---------------------------------------------------------------------------
+# Assertion helpers
+# ---------------------------------------------------------------------------
+CURRENT_TEST=""
+CURRENT_LOG=""
+
+begin_test() {
+    CURRENT_TEST="$1"
+    CURRENT_LOG="$TEST_OUTPUT/${1}.log"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    printf '  %-38s ' "$1"
+}
+
+pass_test() {
+    echo -e "${GREEN}PASS${NC}"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+}
+
+fail_test() {
+    echo -e "${RED}FAIL${NC}"
+    echo "      $1"
+    [[ -n "$CURRENT_LOG" ]] && echo "      log: $CURRENT_LOG"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    FAILED_NAMES+=("$CURRENT_TEST")
+}
+
+# assert_output_has <file> <needle> [more needles...]
+assert_output_has() {
+    local file="$1"; shift
+    local needle
+    for needle in "$@"; do
+        if ! grep -qF -- "$needle" "$file"; then
+            fail_test "expected output to contain: $needle"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# assert_output_lacks <file> <needle> [more needles...]
+assert_output_lacks() {
+    local file="$1"; shift
+    local needle
+    for needle in "$@"; do
+        if grep -qF -- "$needle" "$file"; then
+            fail_test "output should NOT contain: $needle"
+            return 1
+        fi
+    done
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Cache seeding
+#
+# Mirrors BUILD-CACHE-KEY in src/main.cob: a rolling polynomial hash over
+# "<model>|<prompt>", rendered as 12 hash digits + 4 length digits + the
+# first 48 characters of the key. GnuCOBOL's FUNCTION ORD is the ASCII code
+# plus one, hence the "+ 1" below.
+# ---------------------------------------------------------------------------
+cache_hash() {
+    local key="$1|$2"
+    local acc=0 i char code
+    for (( i = 0; i < ${#key}; i++ )); do
+        char="${key:i:1}"
+        printf -v code '%d' "'$char"
+        acc=$(( (acc * 31 + code + 1) % 999999937 ))
+    done
+    printf '%012d%04d%-48.48s' "$acc" "${#key}" "$key"
+}
+
+# cache_record <prompt> <response> [yyyymmddhhmmss]
+cache_record() {
+    local prompt="$1" response="$2" stamp="${3:-$(date +%Y%m%d%H%M%S)}"
+    printf '%s%s%s%s\n' "$(cache_hash "$TEST_MODEL" "$prompt")" \
+        "$stamp" "Y" "$response"
+}
+
+reset_cache() {
+    rm -f "$CACHE_FILE"
+}
+
+# run_cli <log> <args...> - one-shot mode
+run_cli() {
+    local log="$1"; shift
+    timeout 60 "$CLI" "$@" > "$log" 2>&1
+}
+
+# run_cli_input <log> <stdin text> - interactive mode
+run_cli_input() {
+    local log="$1" input="$2"
+    printf '%b' "$input" | timeout 60 "$CLI" > "$log" 2>&1
+}
+
+# ---------------------------------------------------------------------------
+# Preflight
+# ---------------------------------------------------------------------------
 echo "========================================"
 echo "       COBOL AI CLI - Test Suite"
 echo "========================================"
 echo ""
 
-# Function to run a test
-run_test() {
-    local test_name="$1"
-    local test_command="$2"
-
-    echo -n "Running: $test_name... "
-    TESTS_RUN=$((TESTS_RUN + 1))
-
-    if eval "$test_command" > "$TEST_OUTPUT/${test_name}.log" 2>&1; then
-        echo -e "${GREEN}PASSED${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAILED${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo "  See: $TEST_OUTPUT/${test_name}.log"
-    fi
-}
-
-# Check dependencies
-echo "Checking dependencies..."
-echo ""
-
-if ! command -v cobc &> /dev/null; then
-    echo -e "${RED}ERROR: GnuCOBOL compiler (cobc) not found${NC}"
-    echo "Install with: sudo apt-get install gnucobol"
-    exit 1
-fi
-
-if ! command -v curl &> /dev/null; then
-    echo -e "${RED}ERROR: curl not found${NC}"
-    echo "Install with: sudo apt-get install curl"
-    exit 1
-fi
-
-echo -e "${GREEN}✓${NC} GnuCOBOL found: $(cobc --version | head -1)"
-echo -e "${GREEN}✓${NC} curl found: $(curl --version | head -1)"
-echo ""
-
-# Build the project
-echo "Building project..."
-cd "$PROJECT_ROOT"
-make clean > /dev/null 2>&1 || true
-
-if ! make all > "$TEST_OUTPUT/build.log" 2>&1; then
-    echo -e "${RED}BUILD FAILED${NC}"
-    echo "See: $TEST_OUTPUT/build.log"
-    exit 1
-fi
-echo -e "${GREEN}✓${NC} Build successful"
-echo ""
-
-# Check environment configuration
-echo "Checking environment configuration..."
-if [ ! -f "$PROJECT_ROOT/.env" ]; then
-    echo -e "${YELLOW}WARNING: .env file not found${NC}"
-    echo "Some tests may fail"
-else
-    echo -e "${GREEN}✓${NC} .env file found"
-
-    # Source environment
-    set -a
-    source "$PROJECT_ROOT/.env"
-    set +a
-
-    # Check required variables
-    if [ -z "$AI_OLLAMA_API_KEY" ]; then
-        echo -e "${RED}ERROR: AI_OLLAMA_API_KEY not set${NC}"
+for dep in cobc curl timeout; do
+    if ! command -v "$dep" &> /dev/null; then
+        echo -e "${RED}ERROR: required tool '$dep' not found${NC}"
         exit 1
     fi
-    echo -e "${GREEN}✓${NC} AI_OLLAMA_API_KEY is set"
+done
+echo -e "${GREEN}OK${NC} $(cobc --version | head -1)"
 
-    if [ -z "$AI_OLLAMA_BASE_URL" ]; then
-        echo -e "${YELLOW}WARNING: AI_OLLAMA_BASE_URL not set, using default${NC}"
-    else
-        echo -e "${GREEN}✓${NC} AI_OLLAMA_BASE_URL: $AI_OLLAMA_BASE_URL"
-    fi
-
-    if [ -z "$AI_OLLAMA_DEFAULT_MODEL" ]; then
-        echo -e "${YELLOW}WARNING: AI_OLLAMA_DEFAULT_MODEL not set, using default${NC}"
-    else
-        echo -e "${GREEN}✓${NC} AI_OLLAMA_DEFAULT_MODEL: $AI_OLLAMA_DEFAULT_MODEL"
-    fi
+echo ""
+echo "Building..."
+if ! make all > "$TEST_OUTPUT/build.log" 2>&1; then
+    echo -e "${RED}BUILD FAILED${NC} - see $TEST_OUTPUT/build.log"
+    exit 1
 fi
+echo -e "${GREEN}OK${NC} build succeeded"
 echo ""
 
-# Run Unit Tests
-echo "========================================"
-echo "           Unit Tests"
-echo "========================================"
-echo ""
+# ---------------------------------------------------------------------------
+echo -e "${CYAN}Build artifacts${NC}"
+# ---------------------------------------------------------------------------
 
-# Test 1: Configuration module
-run_test "config-module" "echo 'Testing configuration loading...'"
-
-# Test 2: JSON parser module
-run_test "json-parser" "
-# Test JSON payload building
-echo '{\"model\": \"test\", \"prompt\": \"Hello\", \"stream\": false}' | grep -q '\"model\"' && \
-echo '{\"model\": \"test\", \"prompt\": \"Hello\", \"stream\": false}' | grep -q '\"prompt\"' && \
-echo '{\"model\": \"test\", \"prompt\": \"Hello\", \"stream\": false}' | grep -q '\"stream\"'
-"
-
-# Test 3: Prompt handler
-run_test "prompt-handler" "
-# Test empty prompt validation
-test -z '' && echo 'Empty test passed'
-"
-
-# Test 4: Response formatter
-run_test "response-formatter" "
-# Test text wrapping logic
-echo 'Test response' | grep -q 'Test'
-"
-
-echo ""
-# Run Integration Tests
-echo "========================================"
-echo "        Integration Tests"
-echo "========================================"
-echo ""
-
-# Test 5: Build verification
-run_test "build-verification" "test -f '$BIN_DIR/cobol-ai-cli'"
-
-# Test 6: Environment loading
-run_test "env-loading" "env | grep -q 'AI_OLLAMA'"
-
-# Test 7: API connectivity (if credentials available)
-if [ -n "$AI_OLLAMA_API_KEY" ]; then
-    echo -n "Running: api-connectivity... "
-    TESTS_RUN=$((TESTS_RUN + 1))
-
-    # Make a simple API call
-    RESPONSE=$(curl -s -X POST "$AI_OLLAMA_BASE_URL/api/generate" \
-        -H "Authorization: Bearer $AI_OLLAMA_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d '{"model": "'"$AI_OLLAMA_DEFAULT_MODEL"'", "prompt": "test", "stream": false}' \
-        --max-time 10 2>&1)
-
-    if echo "$RESPONSE" | grep -q '"response"' || echo "$RESPONSE" | grep -q '"error"'; then
-        echo -e "${GREEN}PASSED${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAILED${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo "  API response: $RESPONSE"
-    fi
+begin_test "binaries-exist"
+if [[ -x "$CLI" && -x "$BIN_DIR/cobol-ai-cli" && -x "$PROJECT_ROOT/cobol-ai" ]]; then
+    pass_test
 else
-    echo -e "${YELLOW}SKIPPED: api-connectivity (no API key)${NC}"
+    fail_test "expected cobol-ai, cobol-ai.bin and bin/cobol-ai-cli to be executable"
 fi
 
-echo ""
-# Run End-to-End Test
-echo "========================================"
-echo "        End-to-End Tests"
-echo "========================================"
-echo ""
-
-# Test 8: CLI execution
-if [ -f "$BIN_DIR/cobol-ai-cli" ]; then
-    echo -n "Running: cli-execution... "
-    TESTS_RUN=$((TESTS_RUN + 1))
-
-    # Try to run the CLI with a simple prompt
-    OUTPUT=$("$BIN_DIR/cobol-ai-cli" "What is 1+1?" 2>&1)
-
-    # Check if it runs without crashing
-    if [ $? -eq 0 ] || echo "$OUTPUT" | grep -q "AI:" || echo "$OUTPUT" | grep -q "Error"; then
-        echo -e "${GREEN}PASSED${NC}"
-        TESTS_PASSED=$((TESTS_PASSED + 1))
-    else
-        echo -e "${RED}FAILED${NC}"
-        TESTS_FAILED=$((TESTS_FAILED + 1))
-        echo "  Output: $OUTPUT"
-    fi
+# The wrapper once exec'd itself after a rename, which hung the CLI forever.
+begin_test "wrapper-execs-the-binary"
+if grep -q 'exec .*cobol-ai\.bin' "$PROJECT_ROOT/cobol-ai"; then
+    pass_test
 else
-    echo -e "${YELLOW}SKIPPED: cli-execution (binary not found)${NC}"
+    fail_test "wrapper must exec cobol-ai.bin, not itself"
 fi
 
+# ---------------------------------------------------------------------------
 echo ""
-# Test Summary
+echo -e "${CYAN}Configuration validation${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "missing-api-key-is-rejected"
+reset_cache
+env -u AI_OLLAMA_API_KEY timeout 30 "$CLI" "hello" > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "AI_OLLAMA_API_KEY not set" && pass_test
+
+begin_test "short-api-key-is-rejected"
+reset_cache
+AI_OLLAMA_API_KEY="abc" timeout 30 "$CLI" "hello" > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "too short" && pass_test
+
+begin_test "non-http-base-url-is-rejected"
+reset_cache
+AI_OLLAMA_BASE_URL="ftp://example.com" timeout 30 "$CLI" "hello" \
+    > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "must start with http" && pass_test
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Interactive commands${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "help-lists-documented-commands"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'help\nexit\n'
+assert_output_has "$CURRENT_LOG" \
+    "help" "history" "theme" "models" "stats" "cache clear" && pass_test
+
+begin_test "stats-reports-empty-cache"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'stats\nexit\n'
+assert_output_has "$CURRENT_LOG" "Cached Items: 0000" && pass_test
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Response cache${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "cache-hit-survives-process-exit"
+reset_cache
+cache_record "PROMPT ALPHA" "ALPHA-RESPONSE" > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "PROMPT ALPHA"
+assert_output_has "$CURRENT_LOG" "CACHE HIT" "ALPHA-RESPONSE" && pass_test
+
+# Regression: the lookup key used to be written into cache slot 1, which is
+# also a real entry, so the search compared slot 1 against itself and every
+# prompt was answered with entry 1's response.
+begin_test "different-prompt-does-not-false-hit"
+reset_cache
+cache_record "PROMPT ALPHA" "ALPHA-RESPONSE" > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "PROMPT BETA is entirely unrelated"
+assert_output_lacks "$CURRENT_LOG" "CACHE HIT" "ALPHA-RESPONSE" && pass_test
+
+# Regression: the key was truncated to 64 chars, of which the model name ate
+# 13, so prompts sharing an opening phrase collided.
+begin_test "long-shared-prefix-does-not-collide"
+reset_cache
+PREFIX="Explain in detail and with careful reasoning the following topic"
+cache_record "$PREFIX one" "PREFIX-ONE-RESPONSE" > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "$PREFIX two"
+assert_output_lacks "$CURRENT_LOG" "PREFIX-ONE-RESPONSE" && pass_test
+
+begin_test "hit-and-miss-counters-are-accurate"
+reset_cache
+cache_record "PROMPT ALPHA" "ALPHA-RESPONSE" > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "PROMPT ALPHA"
+assert_output_has "$CURRENT_LOG" "Cache Hits:   00001" "Cache Misses: 00000" \
+    && pass_test
+
+begin_test "cache-is-rewritten-on-exit"
+reset_cache
+cache_record "PROMPT ALPHA" "ALPHA-RESPONSE" > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "PROMPT ALPHA"
+if [[ -f "$CACHE_FILE" ]] && grep -qF "ALPHA-RESPONSE" "$CACHE_FILE"; then
+    pass_test
+else
+    fail_test "cache file lost its entry after a clean exit"
+fi
+
+begin_test "expired-entries-are-dropped"
+reset_cache
+{
+    cache_record "PROMPT STALE" "STALE-RESPONSE" "20200101000000"
+    cache_record "PROMPT ALPHA" "ALPHA-RESPONSE"
+} > "$CACHE_FILE"
+run_cli "$CURRENT_LOG" "PROMPT ALPHA"
+if grep -qF "STALE-RESPONSE" "$CACHE_FILE"; then
+    fail_test "entry older than the TTL survived a load/save cycle"
+else
+    assert_output_has "$CURRENT_LOG" "CACHE HIT" "ALPHA-RESPONSE" && pass_test
+fi
+
+begin_test "load-stops-at-the-table-limit"
+reset_cache
+for i in $(seq -w 1 25); do
+    cache_record "BULK PROMPT $i" "BULK-RESPONSE-$i"
+done > "$CACHE_FILE"
+run_cli_input "$CURRENT_LOG" 'stats\nexit\n'
+assert_output_has "$CURRENT_LOG" "Cached Items: 0020" && pass_test
+
+begin_test "corrupt-cache-file-is-ignored"
+reset_cache
+printf 'not a cache record\n\x00\x01garbage\nshort\n' > "$CACHE_FILE"
+run_cli_input "$CURRENT_LOG" 'stats\nexit\n'
+assert_output_has "$CURRENT_LOG" "Cached Items: 0000" && pass_test
+
+begin_test "cache-clear-empties-memory-and-disk"
+reset_cache
+{
+    cache_record "PROMPT ALPHA" "ALPHA-RESPONSE"
+    cache_record "PROMPT GAMMA" "GAMMA-RESPONSE"
+} > "$CACHE_FILE"
+run_cli_input "$CURRENT_LOG" 'cache clear\nstats\nexit\n'
+if [[ -f "$CACHE_FILE" ]]; then
+    fail_test "cache file still exists after 'cache clear'"
+else
+    assert_output_has "$CURRENT_LOG" "Cached Items: 0000" && pass_test
+fi
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Helper script${NC}"
+# ---------------------------------------------------------------------------
+
+# Regression: the helper used to re-source .env unconditionally, so it
+# overrode the caller and the `model` command could never take effect.
+begin_test "helper-honours-caller-environment"
+COBOL_AI_HELPER_DRY_RUN=1 \
+AI_OLLAMA_DEFAULT_MODEL="probe-model" \
+    ./cobol-ai-helper.sh "hi" > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "MODEL=probe-model" && pass_test
+
+begin_test "helper-uses-model-argument-over-env"
+COBOL_AI_HELPER_DRY_RUN=1 \
+AI_OLLAMA_DEFAULT_MODEL="probe-model" \
+    ./cobol-ai-helper.sh "hi" "argument-model" > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" \
+    "MODEL=argument-model" '"model":"argument-model"' && pass_test
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Cache miss path (stubbed helper)${NC}"
+# ---------------------------------------------------------------------------
+#
+# The program invokes ./cobol-ai-helper.sh relative to its working directory,
+# so running it from a directory holding a stub intercepts the API call
+# without touching the real helper. This exercises the miss path offline.
+
+STUB_DIR="$TEST_OUTPUT/stub"
+STUB_ARGS="$STUB_DIR/helper-args.txt"
+
+setup_stub_helper() {
+    rm -rf "$STUB_DIR"
+    mkdir -p "$STUB_DIR"
+    cat > "$STUB_DIR/cobol-ai-helper.sh" <<STUB
+#!/bin/bash
+printf '%s\n' "\$*" >> "$STUB_ARGS"
+echo '{"model":"stub","response":"STUB-RESPONSE","done":true}' \
+    > /tmp/cobol-ai-response.json
+STUB
+    chmod +x "$STUB_DIR/cobol-ai-helper.sh"
+}
+
+# run_stubbed <log> <stdin text>
+run_stubbed() {
+    ( cd "$STUB_DIR" && printf '%b' "$2" | timeout 60 "$CLI" ) > "$1" 2>&1
+}
+
+begin_test "miss-calls-helper-and-shows-response"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'MISS PROMPT ONE\n\nexit\n'
+assert_output_has "$CURRENT_LOG" "STUB-RESPONSE" "Cache Misses: 00001" \
+    && pass_test
+
+begin_test "miss-response-is-written-to-cache"
+if grep -qF "STUB-RESPONSE" "$CACHE_FILE" 2>/dev/null; then
+    pass_test
+else
+    fail_test "a fresh response was not persisted to $CACHE_FILE"
+fi
+
+# Regression: the selected model must reach the helper, or `model <name>`
+# only relabels the banner while the request keeps the old model.
+begin_test "model-command-reaches-the-request"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'model llama2:7b\nMISS PROMPT TWO\n\nexit\n'
+if grep -qF "llama2:7b" "$STUB_ARGS" 2>/dev/null; then
+    pass_test
+else
+    fail_test "helper was called without the selected model: $(cat "$STUB_ARGS" 2>/dev/null)"
+fi
+
+# The eviction branch in CACHE-RESPONSE only runs once the table is full.
+begin_test "eviction-holds-the-table-at-the-limit"
+reset_cache
+setup_stub_helper
+for i in $(seq -w 1 20); do
+    cache_record "BULK PROMPT $i" "BULK-RESPONSE-$i"
+done > "$CACHE_FILE"
+run_stubbed "$CURRENT_LOG" 'EVICTION TRIGGER PROMPT\n\nexit\n'
+if grep -qF "BULK-RESPONSE-01" "$CACHE_FILE" 2>/dev/null; then
+    fail_test "oldest entry survived eviction"
+elif ! grep -qF "STUB-RESPONSE" "$CACHE_FILE" 2>/dev/null; then
+    fail_test "new entry was not stored after eviction"
+else
+    run_cli_input "$CURRENT_LOG" 'stats\nexit\n'
+    assert_output_has "$CURRENT_LOG" "Cached Items: 0020" && pass_test
+fi
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+reset_cache
+echo ""
 echo "========================================"
 echo "          Test Summary"
 echo "========================================"
@@ -223,6 +420,7 @@ if [ $TESTS_FAILED -eq 0 ]; then
     echo -e "${GREEN}All tests passed!${NC}"
     exit 0
 else
-    echo -e "${RED}Some tests failed. Check logs in: $TEST_OUTPUT${NC}"
+    echo -e "${RED}Failed:${NC} ${FAILED_NAMES[*]}"
+    echo -e "${YELLOW}Logs in: $TEST_OUTPUT${NC}"
     exit 1
 fi

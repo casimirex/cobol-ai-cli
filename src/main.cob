@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.5.1 (Phase 4 - Performance & Reliability)
+      *> Version:     1.5.2 (Phase 4 - Performance & Reliability)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -423,7 +423,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.5.1 (Phase 4 - Complete)         \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.5.2 (Phase 4 - Complete)         \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -1192,7 +1192,10 @@
                MOVE SPACES TO WS-HELPER-CMD
                STRING "./cobol-ai-helper.sh '"
                       DELIMITED BY SIZE
-                      WS-PROMPT-TRIMMED DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-PROMPT-TRIMMED) DELIMITED BY SIZE
+                      "' '"
+                      DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-MODEL) DELIMITED BY SIZE
                       "'"
                       DELIMITED BY SIZE
                    INTO WS-HELPER-CMD

@@ -14,6 +14,10 @@ lib/*.o
 *.response.json
 /tmp/cobol-ai-*.json
 
+# Local tooling state
+.claude/settings.local.json
+.claude/*.tmp.*
+
 # Editor/IDE files
 *.swp
 *.swo

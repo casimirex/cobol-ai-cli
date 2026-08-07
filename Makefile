@@ -18,9 +18,13 @@ MAIN_SRC = $(SRC_DIR)/main.cob
 # Main executable
 EXECUTABLE = $(BIN_DIR)/cobol-ai-cli
 
+# Binary invoked by the ./cobol-ai wrapper - this is what users actually
+# run, so it must be built by the same target the tests use.
+WRAPPER_BIN = cobol-ai.bin
+
 # Default target
 .PHONY: all
-all: dirs $(EXECUTABLE)
+all: dirs $(EXECUTABLE) $(WRAPPER_BIN)
 
 # Create directories
 .PHONY: dirs
@@ -32,11 +36,17 @@ $(EXECUTABLE): $(MAIN_SRC) | dirs
 	@echo "Building $(EXECUTABLE)..."
 	$(COBC) $(COBC_FLAGS) -o $@ $(MAIN_SRC)
 
+# Compile the wrapper's binary from the same source
+$(WRAPPER_BIN): $(MAIN_SRC)
+	@echo "Building $(WRAPPER_BIN)..."
+	$(COBC) $(COBC_FLAGS) -o $@ $(MAIN_SRC)
+
 # Clean build artifacts
 .PHONY: clean
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BIN_DIR)/* $(OBJ_DIR)/*
+	rm -f $(WRAPPER_BIN)
 	rm -f /tmp/cobol-ai-*.json
 
 # Run the program
