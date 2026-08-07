@@ -42,7 +42,15 @@
       *> Build helper command
                MOVE SPACES TO WS-HELPER-CMD
                PERFORM WRITE-PROMPT-FILE
-               STRING "./cobol-ai-helper.sh --prompt-file '"
+      *> The helper writes the response and status files, so it has to
+      *> be told this run's paths rather than assuming fixed ones.
+               STRING "COBOL_AI_RESPONSE_FILE='"
+                      DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-RESPONSE-FILE) DELIMITED BY SIZE
+                      "' COBOL_AI_STATUS_FILE='" DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-STATUS-FILE-NAME)
+                          DELIMITED BY SIZE
+                      "' ./cobol-ai-helper.sh --prompt-file '"
                       DELIMITED BY SIZE
                       FUNCTION TRIM(WS-PROMPT-FILE-NAME)
                           DELIMITED BY SIZE
@@ -183,8 +191,6 @@
 
        PARSE-RESPONSE.
       *> Read response file
-           MOVE "/tmp/cobol-ai-response.json"
-               TO WS-RESPONSE-FILE.
            OPEN INPUT RESPONSE-FILE.
            IF WS-FILE-STATUS NOT = "00"
                CALL "SYSTEM" USING

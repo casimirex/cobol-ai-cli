@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.8.0 (Keyring Credentials)
+      *> Version:     1.9.0 (Per-Run State Paths)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -143,6 +143,8 @@
            STOP RUN.
 
        INITIALIZE-PROGRAM.
+      *> Must run first: everything below opens files by these paths.
+           PERFORM INIT-PATHS.
            PERFORM DISPLAY-BANNER.
            PERFORM LOAD-CONFIGURATION.
            PERFORM VALIDATE-CONFIGURATION.

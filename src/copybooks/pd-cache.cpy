@@ -209,7 +209,10 @@
                MOVE SPACES TO WS-CACHE-TIMESTAMP(WS-CACHE-INDEX)
                MOVE "N" TO WS-CACHE-VALID(WS-CACHE-INDEX)
            END-PERFORM.
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-cache.dat".
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-CACHE-FILE) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
            DISPLAY SPACES.
            CALL "SYSTEM" USING
                "printf '\033[32m[OK]\033[0m Response cache cleared'".

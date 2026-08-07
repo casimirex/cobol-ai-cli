@@ -70,7 +70,9 @@
 
        EXPORT-AS-TEXT.
       *> Export as plain text file
-           MOVE "/tmp/cobol-ai-export.txt" TO WS-EXPORT-FILE-NAME.
+           MOVE SPACES TO WS-EXPORT-FILE-NAME
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/export.txt"
+               DELIMITED BY SIZE INTO WS-EXPORT-FILE-NAME.
            MOVE WS-EXPORT-FILE-NAME TO WS-CONV-FILE-NAME.
            OPEN OUTPUT CONVERSATION-FILE.
            IF WS-CONV-STATUS = "00"

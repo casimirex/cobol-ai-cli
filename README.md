@@ -57,7 +57,7 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **Input Validation** | Real-time prompt length indicator (max 500 chars) |
 | **Command History** | View previous prompts with `history` command |
 | **Clear Screen** | Clean the terminal with `clear` command |
-| **History Persistence** | Commands saved across sessions to `/tmp/cobol-ai-history.txt` |
+| **History Persistence** | Commands saved across sessions to `$XDG_STATE_HOME/cobol-ai-cli/history.txt` |
 | **Enhanced Colored UI** | Beautiful terminal colors for all output |
 | **Status Indicators** | Visual feedback with `[SEND]`, `[RECV]`, `[OK]`, `[ERR]` icons |
 
@@ -598,7 +598,37 @@ source .env
 
 ## Changelog
 
-### v1.8.0 (Keyring Credentials) - Latest
+### v1.9.0 (Per-User, Per-Run State Paths) - Latest
+- **Fixed cross-talk between concurrent sessions.** All 11 runtime files used
+  fixed `/tmp` names. `prompt.txt`, `response.json` and `status.txt` are written
+  then read back within one request, so two overlapping runs would trade
+  answers — reproduced before the fix: run A asked "ALPHA-QUESTION" and was
+  answered "ECHO[BETA-QUESTION]", with nothing in the output to suggest
+  anything was wrong.
+- **Fixed lockout on shared machines.** Files owned by whoever ran first could
+  not be truncated by anyone else. The worst case was `key.txt` at mode `0600`:
+  a second user's keyring lookup failed to write, silently produced an empty
+  key, and reported "AI_OLLAMA_API_KEY not set" while their key sat in the
+  keyring.
+- Persistent state (cache, history, theme, conversation, export) now lives in
+  `$XDG_STATE_HOME/cobol-ai-cli`, falling back to `~/.local/state/cobol-ai-cli`,
+  created `0700`. It survives reboots, which `/tmp` does not.
+- Per-request scratch files carry a run id: `/tmp/cobol-ai-<runid>-*`. The
+  wrapper exports the shell PID; a direct `cobol-ai.bin` call derives one from
+  the clock plus a random suffix.
+- The helper is told the paths through `COBOL_AI_RESPONSE_FILE` and
+  `COBOL_AI_STATUS_FILE`, defaulting to the old names for manual use.
+- Widened every path field to 200 characters — the intermediate `WS-HISTORY-FILE`
+  was still `X(100)` and silently truncated long state paths.
+- 3 new tests, including two genuinely concurrent runs that must not swap
+  answers. Mutation-checked: restoring shared scratch names fails it.
+
+**Migration**: existing state in `/tmp/cobol-ai-*.txt` is not read any more.
+Nothing breaks — a new cache and history are created on first run — but old
+history and cached responses are not carried over. Delete the stale files at
+your convenience.
+
+### v1.8.0 (Keyring Credentials)
 - **`LOAD-ENCRYPTED-CREDENTIALS` now does what the README always said it did.**
   It was a three-line stub that set a flag to `"N"` and returned, while the
   banner carried a "(encrypted credentials)" branch on a condition that could

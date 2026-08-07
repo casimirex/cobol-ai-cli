@@ -12,5 +12,9 @@ if [[ -f "$ENV_FILE" ]]; then
     set +a
 fi
 
+# Give this run a private set of scratch filenames so two concurrent
+# sessions cannot overwrite each other's prompt or response.
+export COBOL_AI_RUN_ID="$$"
+
 # Run the COBOL program with all arguments
 exec "${SCRIPT_DIR}/cobol-ai.bin" "$@"

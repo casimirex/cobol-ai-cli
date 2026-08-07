@@ -13,7 +13,7 @@
              88 CACHE-DISABLED VALUE "N".
           05 WS-CACHE-HITS      PIC 9(5) VALUE 0.
           05 WS-CACHE-MISSES    PIC 9(5) VALUE 0.
-          05 WS-CACHE-FILE      PIC X(100) VALUE "/tmp/cobol-ai-cache.dat".
+          05 WS-CACHE-FILE      PIC X(200) VALUE SPACES.
           05 WS-CACHE-STATUS    PIC XX VALUE SPACES.
           05 WS-CACHE-KEY       PIC X(12100) VALUE SPACES.
           05 WS-CACHE-HASH      PIC X(64) VALUE SPACES.

@@ -5,6 +5,98 @@
       *> Included by src/main.cob - not compiled on its own.
       *>================================================================*
 
+       INIT-PATHS.
+      *> Resolve every runtime path before any file is touched.
+      *> Persistent state: XDG_STATE_HOME, else ~/.local/state, else /tmp.
+           MOVE SPACES TO WS-PATH-ENV.
+           ACCEPT WS-PATH-ENV FROM ENVIRONMENT "XDG_STATE_HOME".
+           IF WS-PATH-ENV NOT = SPACES
+               STRING FUNCTION TRIM(WS-PATH-ENV) "/cobol-ai-cli"
+                   DELIMITED BY SIZE INTO WS-STATE-DIR
+           ELSE
+               MOVE SPACES TO WS-PATH-ENV
+               ACCEPT WS-PATH-ENV FROM ENVIRONMENT "HOME"
+               IF WS-PATH-ENV NOT = SPACES
+                   STRING FUNCTION TRIM(WS-PATH-ENV)
+                          "/.local/state/cobol-ai-cli"
+                       DELIMITED BY SIZE INTO WS-STATE-DIR
+               ELSE
+      *> No HOME at all - fall back to /tmp, still per-user by name
+                   MOVE "/tmp/cobol-ai-state" TO WS-STATE-DIR
+               END-IF
+           END-IF.
+
+           MOVE SPACES TO WS-PATH-CMD.
+           STRING "mkdir -p -m 700 '" DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-STATE-DIR) DELIMITED BY SIZE
+                  "' 2>/dev/null" DELIMITED BY SIZE
+               INTO WS-PATH-CMD
+           END-STRING.
+           CALL "SYSTEM" USING WS-PATH-CMD.
+
+      *> Run id: the wrapper exports the shell PID; otherwise derive one
+      *> from the clock and a random suffix so direct invocations of
+      *> cobol-ai.bin still get a private set of scratch files.
+           MOVE SPACES TO WS-PATH-ENV.
+           ACCEPT WS-PATH-ENV FROM ENVIRONMENT "COBOL_AI_RUN_ID".
+           IF WS-PATH-ENV NOT = SPACES
+               MOVE FUNCTION TRIM(WS-PATH-ENV) TO WS-RUN-ID
+           ELSE
+               MOVE FUNCTION CURRENT-DATE(9:8) TO WS-RUN-SEED
+               COMPUTE WS-RUN-RAND =
+                   FUNCTION RANDOM(WS-RUN-SEED) * 999999
+               MOVE SPACES TO WS-RUN-ID
+               STRING WS-RUN-SEED WS-RUN-RAND
+                   DELIMITED BY SIZE INTO WS-RUN-ID
+           END-IF.
+
+           MOVE SPACES TO WS-TMP-PREFIX.
+           STRING "/tmp/cobol-ai-" FUNCTION TRIM(WS-RUN-ID) "-"
+               DELIMITED BY SIZE INTO WS-TMP-PREFIX.
+
+      *> Persistent state files
+           PERFORM BUILD-STATE-PATHS.
+      *> Per-request scratch files
+           PERFORM BUILD-SCRATCH-PATHS.
+
+       BUILD-STATE-PATHS.
+           MOVE SPACES TO WS-CACHE-FILE.
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/cache.dat"
+               DELIMITED BY SIZE INTO WS-CACHE-FILE.
+           MOVE SPACES TO WS-HIST-FILE-NAME.
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/history.txt"
+               DELIMITED BY SIZE INTO WS-HIST-FILE-NAME.
+           MOVE SPACES TO WS-THEME-FILE-NAME.
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/theme.txt"
+               DELIMITED BY SIZE INTO WS-THEME-FILE-NAME.
+           MOVE SPACES TO WS-CONV-FILE-NAME.
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/conversation.json"
+               DELIMITED BY SIZE INTO WS-CONV-FILE-NAME.
+
+       BUILD-SCRATCH-PATHS.
+           MOVE SPACES TO WS-RESPONSE-FILE.
+           STRING FUNCTION TRIM(WS-TMP-PREFIX) "response.json"
+               DELIMITED BY SIZE INTO WS-RESPONSE-FILE.
+           MOVE SPACES TO WS-STATUS-FILE-NAME.
+           STRING FUNCTION TRIM(WS-TMP-PREFIX) "status.txt"
+               DELIMITED BY SIZE INTO WS-STATUS-FILE-NAME.
+           MOVE SPACES TO WS-PROMPT-FILE-NAME.
+           STRING FUNCTION TRIM(WS-TMP-PREFIX) "prompt.txt"
+               DELIMITED BY SIZE INTO WS-PROMPT-FILE-NAME.
+           MOVE SPACES TO WS-KEYRING-FILE-NAME.
+           STRING FUNCTION TRIM(WS-TMP-PREFIX) "key.txt"
+               DELIMITED BY SIZE INTO WS-KEYRING-FILE-NAME.
+      *> COBOL_AI_STDIN names the file the wrapper captured stdin into
+           MOVE SPACES TO WS-PATH-ENV.
+           ACCEPT WS-PATH-ENV FROM ENVIRONMENT "COBOL_AI_STDIN".
+           IF WS-PATH-ENV NOT = SPACES
+               MOVE FUNCTION TRIM(WS-PATH-ENV) TO WS-STDIN-TEMP-FILE
+           ELSE
+               MOVE SPACES TO WS-STDIN-TEMP-FILE
+               STRING FUNCTION TRIM(WS-TMP-PREFIX) "stdin.txt"
+                   DELIMITED BY SIZE INTO WS-STDIN-TEMP-FILE
+           END-IF.
+
        LOAD-CONFIGURATION.
       *> An explicitly exported key wins; otherwise consult the keyring.
       *> Note the ./cobol-ai wrapper exports .env, so a key left in .env
@@ -92,7 +184,10 @@
                CLOSE KEYRING-FILE
            END-IF.
 
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-key.txt".
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-KEYRING-FILE-NAME) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
 
            IF FUNCTION TRIM(WS-KEYRING-VALUE) NOT = SPACES
                MOVE FUNCTION TRIM(WS-KEYRING-VALUE) TO WS-API-KEY

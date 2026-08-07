@@ -6,9 +6,18 @@
       *>================================================================*
 
        CLEANUP-TEMP-FILES.
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-response.json".
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-prompt.txt".
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-status.txt".
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-RESPONSE-FILE) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-PROMPT-FILE-NAME) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-STATUS-FILE-NAME) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
 
        CLEANUP-PROGRAM.
       *> Persist the cache so the next run starts warm

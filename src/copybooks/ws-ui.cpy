@@ -45,8 +45,7 @@
           05 WS-CURRENT-THEME  PIC X(20) VALUE "dark".
              88 THEME-DARK     VALUE "dark".
              88 THEME-LIGHT    VALUE "light".
-          05 WS-THEME-FILE-NAME PIC X(100) VALUE
-              "/tmp/cobol-ai-theme.txt".
+          05 WS-THEME-FILE-NAME PIC X(200) VALUE SPACES.
        01 WS-THEME-STATUS     PIC XX VALUE SPACES.
 
       *> Color codes for themes

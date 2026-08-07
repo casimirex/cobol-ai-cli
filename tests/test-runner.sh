@@ -5,8 +5,9 @@
 # program output; none of them pass unconditionally.
 #
 # The suite runs OFFLINE and costs nothing: the response cache is file
-# backed, so seeding /tmp/cobol-ai-cache.dat lets the program answer from
-# cache without ever calling the API. Tests that must exercise a cache MISS
+# backed, so seeding it lets the program answer from cache without ever
+# calling the API. State is redirected into test-output via XDG_STATE_HOME,
+# so a run never touches the developer's real cache or history. Tests that must exercise a cache MISS
 # point the base URL at a dead local port so the request fails immediately
 # instead of reaching the real endpoint with real credentials.
 #
@@ -31,7 +32,14 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BIN_DIR="$PROJECT_ROOT/bin"
 TEST_OUTPUT="$PROJECT_ROOT/test-output"
 CLI="$PROJECT_ROOT/cobol-ai.bin"
-CACHE_FILE="/tmp/cobol-ai-cache.dat"
+
+# Isolate all persistent state in the test output directory, and pin the
+# run id so the per-request scratch paths are predictable.
+export XDG_STATE_HOME="$TEST_OUTPUT/state"
+export COBOL_AI_RUN_ID="testrun"
+STATE_DIR="$XDG_STATE_HOME/cobol-ai-cli"
+CACHE_FILE="$STATE_DIR/cache.dat"
+SCRATCH_PREFIX="/tmp/cobol-ai-${COBOL_AI_RUN_ID}-"
 
 mkdir -p "$TEST_OUTPUT"
 cd "$PROJECT_ROOT" || exit 1
@@ -128,7 +136,8 @@ cache_record() {
 }
 
 reset_cache() {
-    rm -f "$CACHE_FILE"
+    rm -rf "$STATE_DIR"
+    mkdir -p "$STATE_DIR"
 }
 
 # run_cli <log> <args...> - one-shot mode
@@ -208,8 +217,9 @@ EOF
     chmod +x "$KEYRING_DIR/secret-tool"
     cat > "$KEYRING_DIR/cobol-ai-helper.sh" <<'HSTUB'
 #!/bin/bash
-echo '200' > /tmp/cobol-ai-status.txt
-echo '{"response":"KEYRING-STUB","done":true}' > /tmp/cobol-ai-response.json
+echo '200' > "${COBOL_AI_STATUS_FILE:-/tmp/cobol-ai-status.txt}"
+echo '{"response":"KEYRING-STUB","done":true}' \
+    > "${COBOL_AI_RESPONSE_FILE:-/tmp/cobol-ai-response.json}"
 HSTUB
     chmod +x "$KEYRING_DIR/cobol-ai-helper.sh"
 }
@@ -382,7 +392,7 @@ if [ "\$1" = "--prompt-file" ] && [ -f "\$2" ]; then
     cp "\$2" "$STUB_DIR/last-prompt.txt"
 fi
 echo '{"model":"stub","response":"STUB-RESPONSE","done":true}' \
-    > /tmp/cobol-ai-response.json
+    > "\${COBOL_AI_RESPONSE_FILE:-/tmp/cobol-ai-response.json}"
 STUB
     chmod +x "$STUB_DIR/cobol-ai-helper.sh"
 }
@@ -588,8 +598,8 @@ setup_failing_stub() {
     cat > "$STUB_DIR/cobol-ai-helper.sh" <<STUB
 #!/bin/bash
 printf 'call\n' >> "$STUB_ARGS"
-echo '$1' > /tmp/cobol-ai-status.txt
-echo '$2' > /tmp/cobol-ai-response.json
+echo '$1' > "\${COBOL_AI_STATUS_FILE:-/tmp/cobol-ai-status.txt}"
+echo '$2' > "\${COBOL_AI_RESPONSE_FILE:-/tmp/cobol-ai-response.json}"
 exit 1
 STUB
     chmod +x "$STUB_DIR/cobol-ai-helper.sh"
@@ -664,14 +674,17 @@ fi
 
 # The real helper must record a status for the COBOL side to read.
 begin_test "helper-records-http-status"
-rm -f /tmp/cobol-ai-status.txt
+HELPER_STATUS="$TEST_OUTPUT/helper-status.txt"
+rm -f "$HELPER_STATUS"
 AI_OLLAMA_API_KEY="test-key-0123456789" \
 AI_OLLAMA_BASE_URL="http://127.0.0.1:1" \
+COBOL_AI_STATUS_FILE="$HELPER_STATUS" \
+COBOL_AI_RESPONSE_FILE="$TEST_OUTPUT/helper-response.json" \
     ./cobol-ai-helper.sh "hi" test-model > "$CURRENT_LOG" 2>&1
-if [[ "$(cat /tmp/cobol-ai-status.txt 2>/dev/null)" == "000" ]]; then
+if [[ "$(cat "$HELPER_STATUS" 2>/dev/null)" == "000" ]]; then
     pass_test
 else
-    fail_test "expected status 000 for a refused connection, got '$(cat /tmp/cobol-ai-status.txt 2>/dev/null)'"
+    fail_test "expected status 000 for a refused connection, got '$(cat "$HELPER_STATUS" 2>/dev/null)'"
 fi
 
 # ---------------------------------------------------------------------------
@@ -687,8 +700,8 @@ assert_output_has "$CURRENT_LOG" "encrypted credentials" "KEYRING-STUB" \
     && pass_test
 
 begin_test "keyring-temp-file-is-cleaned-up"
-if [[ -e /tmp/cobol-ai-key.txt ]]; then
-    fail_test "the key was left behind in /tmp/cobol-ai-key.txt"
+if [[ -e "${SCRATCH_PREFIX}key.txt" ]]; then
+    fail_test "the key was left behind in ${SCRATCH_PREFIX}key.txt"
 else
     pass_test
 fi
@@ -720,6 +733,59 @@ reset_cache
 setup_fake_keyring ""
 run_with_keyring "$CURRENT_LOG" -u AI_OLLAMA_API_KEY
 assert_output_has "$CURRENT_LOG" "secret-tool store" && pass_test
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Concurrent sessions${NC}"
+# ---------------------------------------------------------------------------
+#
+# Scratch files used to have fixed names, so two overlapping runs shared
+# one prompt file and one response file and could answer each other's
+# question. The helper below sleeps to guarantee the runs overlap.
+
+begin_test "concurrent-runs-do-not-cross-talk"
+CONC_DIR="$TEST_OUTPUT/concurrent"
+rm -rf "$CONC_DIR"; mkdir -p "$CONC_DIR"
+cat > "$CONC_DIR/cobol-ai-helper.sh" <<'CSTUB'
+#!/bin/bash
+PROMPT="$(cat "$2")"
+sleep 2
+echo '200' > "$COBOL_AI_STATUS_FILE"
+echo "{\"response\":\"ECHO[$PROMPT]\",\"done\":true}" \
+    > "$COBOL_AI_RESPONSE_FILE"
+CSTUB
+chmod +x "$CONC_DIR/cobol-ai-helper.sh"
+reset_cache
+( cd "$CONC_DIR" && env COBOL_AI_RUN_ID=conc-a timeout 60 "$CLI" \
+    "ALPHA-QUESTION" > "$CONC_DIR/a.log" 2>&1 ) &
+( cd "$CONC_DIR" && env COBOL_AI_RUN_ID=conc-b timeout 60 "$CLI" \
+    "BETA-QUESTION" > "$CONC_DIR/b.log" 2>&1 ) &
+wait
+A_GOT=$(grep -o 'ECHO\[[A-Z-]*\]' "$CONC_DIR/a.log" | head -1)
+B_GOT=$(grep -o 'ECHO\[[A-Z-]*\]' "$CONC_DIR/b.log" | head -1)
+if [[ "$A_GOT" == "ECHO[ALPHA-QUESTION]" && "$B_GOT" == "ECHO[BETA-QUESTION]" ]]; then
+    pass_test
+else
+    fail_test "answers crossed over: A got '$A_GOT', B got '$B_GOT'"
+fi
+
+begin_test "state-lives-outside-tmp"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'a question\n\nexit\n'
+if [[ -f "$CACHE_FILE" ]]; then
+    pass_test
+else
+    fail_test "cache was not written to $CACHE_FILE"
+fi
+
+begin_test "scratch-files-are-removed-after-a-request"
+LEFTOVER=$(ls "${SCRATCH_PREFIX}"* 2>/dev/null | tr '\n' ' ')
+if [[ -n "$LEFTOVER" ]]; then
+    fail_test "scratch files left behind: $LEFTOVER"
+else
+    pass_test
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

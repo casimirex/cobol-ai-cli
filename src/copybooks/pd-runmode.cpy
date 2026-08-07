@@ -46,7 +46,10 @@
                        TO WS-STDIN-LENGTH
            END-READ.
            CLOSE STDIN-FILE.
-           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-stdin.txt".
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "rm -f '" FUNCTION TRIM(WS-STDIN-TEMP-FILE) "'"
+               DELIMITED BY SIZE INTO WS-PATH-CMD
+           CALL "SYSTEM" USING WS-PATH-CMD.
 
       *>================================================================*
       *> APPLICATION RUNNER

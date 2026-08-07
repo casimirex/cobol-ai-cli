@@ -19,8 +19,7 @@
              88 KEY-ENCRYPTED   VALUE "Y".
 
        01 WS-KEYRING.
-          05 WS-KEYRING-FILE-NAME   PIC X(100) VALUE
-              "/tmp/cobol-ai-key.txt".
+          05 WS-KEYRING-FILE-NAME   PIC X(200) VALUE SPACES.
           05 WS-KEYRING-FILE-STATUS PIC XX VALUE SPACES.
           05 WS-KEYRING-VALUE       PIC X(200) VALUE SPACES.
           05 WS-KEYRING-CMD         PIC X(500) VALUE SPACES.
@@ -44,8 +43,24 @@
           05 WS-HTTP-RETRYABLE  PIC X VALUE "N".
              88 HTTP-RETRYABLE   VALUE "Y".
           05 WS-STATUS-TEXT     PIC X(10) VALUE SPACES.
-       01 WS-STATUS-FILE-NAME   PIC X(100) VALUE
-           "/tmp/cobol-ai-status.txt".
+       01 WS-STATUS-FILE-NAME   PIC X(200) VALUE SPACES.
        01 WS-STATUS-FILE-STATUS PIC XX VALUE SPACES.
 
       *>================================================================*
+
+      *>================================================================*
+      *> Runtime paths
+      *>
+      *> Persistent state lives under XDG_STATE_HOME (or ~/.local/state)
+      *> so it survives reboots and does not collide between users.
+      *> Per-request scratch files carry a run id so two concurrent
+      *> sessions cannot read each other's prompt or response.
+      *>================================================================*
+       01 WS-PATHS.
+          05 WS-STATE-DIR       PIC X(200) VALUE SPACES.
+          05 WS-RUN-ID          PIC X(20) VALUE SPACES.
+          05 WS-TMP-PREFIX      PIC X(200) VALUE SPACES.
+          05 WS-PATH-ENV        PIC X(200) VALUE SPACES.
+          05 WS-PATH-CMD        PIC X(500) VALUE SPACES.
+          05 WS-RUN-SEED        PIC 9(8) VALUE 0.
+          05 WS-RUN-RAND        PIC 9(6) VALUE 0.

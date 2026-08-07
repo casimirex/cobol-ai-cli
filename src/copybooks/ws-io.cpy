@@ -35,8 +35,7 @@
       *> The composed prompt actually sent to the API: either the typed
       *> prompt, or the question plus the attached file's contents.
        01 WS-FULL-PROMPT        PIC X(12000) VALUE SPACES.
-       01 WS-PROMPT-FILE-NAME   PIC X(100) VALUE
-           "/tmp/cobol-ai-prompt.txt".
+       01 WS-PROMPT-FILE-NAME   PIC X(200) VALUE SPACES.
        01 WS-PROMPT-FILE-STATUS PIC XX VALUE SPACES.
        01 WS-NL                 PIC X VALUE X"0A".
 
@@ -75,7 +74,7 @@
        01 WS-HAS-STDIN          PIC X VALUE "N".
           88 HAS-STDIN          VALUE "Y".
           88 NO-STDIN           VALUE "N".
-       01 WS-STDIN-TEMP-FILE    PIC X(100) VALUE "/tmp/cobol-ai-stdin.txt".
+       01 WS-STDIN-TEMP-FILE    PIC X(200) VALUE SPACES.
        01 WS-STDIN-FILE-STATUS  PIC XX VALUE SPACES.
        01 WS-STDIN-TEMP         PIC X VALUE "N".
 

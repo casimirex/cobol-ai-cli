@@ -22,7 +22,7 @@
       *>================================================================*
       *> SECTION: COMMAND HISTORY (NEW - Phase 1)
       *>================================================================*
-       01 WS-HISTORY-FILE       PIC X(100) VALUE SPACES.
+       01 WS-HISTORY-FILE       PIC X(200) VALUE SPACES.
        01 WS-HISTORY-STATUS     PIC XX VALUE SPACES.
        01 WS-HISTORY-COUNT      PIC 9(4) VALUE 0.
        01 WS-HISTORY-MAX        PIC 9(4) VALUE 100.
@@ -32,8 +32,7 @@
           05 WS-HISTORY-ENTRY OCCURS 100 TIMES.
              10 WS-HIST-TEXT   PIC X(1000).
 
-       01 WS-HIST-FILE-NAME     PIC X(100) VALUE
-           "/tmp/cobol-ai-history.txt".
+       01 WS-HIST-FILE-NAME     PIC X(200) VALUE SPACES.
 
       *>================================================================*
       *> SECTION: RESPONSE BUFFER
@@ -46,7 +45,7 @@
       *>================================================================*
       *> SECTION: CONVERSATION HISTORY (Phase 2)
       *>================================================================*
-       01 WS-CONVERSATION-FILE  PIC X(100) VALUE SPACES.
+       01 WS-CONVERSATION-FILE  PIC X(200) VALUE SPACES.
        01 WS-CONV-STATUS        PIC XX VALUE SPACES.
        01 WS-CONV-COUNT         PIC 9(4) VALUE 0.
        01 WS-CONV-MAX           PIC 9(4) VALUE 50.
@@ -58,9 +57,8 @@
              10 WS-CONV-RESPONSE PIC X(5000).
              10 WS-CONV-TIMESTAMP PIC X(20).
 
-       01 WS-CONV-FILE-NAME     PIC X(100) VALUE
-           "/tmp/cobol-ai-conversation.json".
-       01 WS-EXPORT-FILE-NAME   PIC X(100) VALUE SPACES.
+       01 WS-CONV-FILE-NAME     PIC X(200) VALUE SPACES.
+       01 WS-EXPORT-FILE-NAME   PIC X(200) VALUE SPACES.
 
       *>================================================================*
       *> SECTION: MODEL MANAGEMENT (Phase 2)

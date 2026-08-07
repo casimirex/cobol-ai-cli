@@ -60,8 +60,10 @@ if [ -z "$PROMPT" ]; then
     exit 1
 fi
 
-# Use fixed response file location
-RESPONSE_FILE="/tmp/cobol-ai-response.json"
+# The caller passes per-run paths so concurrent sessions cannot read each
+# other's response. The defaults keep manual invocation working.
+RESPONSE_FILE="${COBOL_AI_RESPONSE_FILE:-/tmp/cobol-ai-response.json}"
+STATUS_FILE="${COBOL_AI_STATUS_FILE:-/tmp/cobol-ai-status.txt}"
 
 # Build JSON payload. The backslash substitution must come first, or it
 # would re-escape the backslashes introduced by the later ones. Newlines
@@ -93,7 +95,6 @@ fi
 # Make API call. The HTTP status is written to its own file so the COBOL
 # side can tell a rate limit apart from a bad key - retrying the former
 # is correct, retrying the latter just wastes time.
-STATUS_FILE="/tmp/cobol-ai-status.txt"
 rm -f "$STATUS_FILE"
 
 HTTP_CODE=$(curl -s -X POST "$BASE_URL/api/generate" \
