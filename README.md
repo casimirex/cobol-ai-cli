@@ -78,7 +78,7 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | Feature | Description |
 |---------|-------------|
 | **Retry Logic** | Automatic retry with exponential backoff on API failures (3 retries, 1s base delay, 30s max) |
-| **Response Caching** | In-memory cache of recent responses (20 entries) to reduce API calls |
+| **Response Caching** | Persistent cache of recent responses (20 entries, 7-day TTL) to reduce API calls |
 | **Encrypted Credentials** | Support for system keyring storage (secret-tool on Linux) |
 | **Error Handling** | Comprehensive error codes and user-friendly error messages |
 | **Session Statistics** | Cache hit/miss statistics displayed at end of session |
@@ -243,6 +243,13 @@ Run without arguments for an interactive session:
 | `clear` | Clear the screen |
 | `theme` | Change color theme (dark/light) |
 | `theme <name>` | Switch theme (e.g., `theme light`) |
+| `models` | List available AI models |
+| `model <name>` | Switch to a different model |
+| `export` | Export conversation to a file |
+| `conversation` | Show conversation history |
+| `output <file>` | Set output file for responses |
+| `stats` | Show cache and error statistics |
+| `cache clear` | Empty the persistent response cache |
 | `exit` | Exit the program |
 | `quit` | Exit the program |
 
@@ -525,9 +532,23 @@ source .env
 
 ## Changelog
 
-### v1.5.0 (Phase 4 - Performance & Reliability) - Latest
+### v1.5.1 (Cache Correctness & Persistence) - Latest
+- **Fixed wrong cached answers**: the lookup key was written into cache slot 1, which is
+  also a real entry, so every lookup compared slot 1 against itself and returned a hit.
+  Any prompt after the first got the first prompt's answer. The key now lives in
+  dedicated scratch storage.
+- **Fixed stale key**: the cache key was built from `WS-PROMPT-TRIMMED`, which is only
+  populated later during payload building, so lookups keyed on the *previous* prompt.
+- **Persistent cache**: the cache is written to `/tmp/cobol-ai-cache.dat` on exit and
+  reloaded at startup, so hits now survive across invocations (previously always 0%).
+- **Entry expiry**: cached entries older than 7 days are dropped on load.
+- **Stronger cache key**: rolling polynomial hash over the full model+prompt key instead
+  of a 64-char prefix, so prompts sharing an opening phrase no longer collide.
+- **New `cache clear` command**: empties the cache in memory and on disk.
+
+### v1.5.0 (Phase 4 - Performance & Reliability)
 - **Retry Logic**: Automatic retry with exponential backoff (3 retries, 1s base, 30s max delay)
-- **Response Caching**: 20-entry in-memory cache to reduce API calls
+- **Response Caching**: 20-entry cache to reduce API calls
 - **Encrypted Credentials**: System keyring integration (secret-tool on Linux)
 - **Error Handling**: Comprehensive error codes and user-friendly messages
 - **Session Statistics**: Cache hit/miss statistics at end of session

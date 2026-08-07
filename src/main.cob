@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.5.0 (Phase 4 - Performance & Reliability)
+      *> Version:     1.5.1 (Phase 4 - Performance & Reliability)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -18,7 +18,7 @@
       *>   - Syntax highlighting for code blocks
       *>   - Real-time prompt length validation
       *>   - Retry logic with exponential backoff (Phase 4)
-      *>   - Response caching to reduce API calls (Phase 4)
+      *>   - Persistent response caching to reduce API calls (Phase 4)
       *>   - Encrypted credential storage (Phase 4)
       *>   - Comprehensive error handling (Phase 4)
       *>================================================================*
@@ -44,6 +44,9 @@
            SELECT OUTPUT-FILE ASSIGN TO WS-OUTPUT-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-OUTPUT-FILE-STATUS.
+           SELECT CACHE-FILE ASSIGN TO WS-CACHE-FILE
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-CACHE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -59,6 +62,8 @@
        01 STDIN-RECORD          PIC X(5000).
        FD OUTPUT-FILE.
        01 OUTPUT-RECORD         PIC X(5000).
+       FD CACHE-FILE.
+       01 CACHE-RECORD          PIC X(25079).
 
        WORKING-STORAGE SECTION.
 
@@ -119,6 +124,26 @@
        01 WS-CACHE-FOUND         PIC X VALUE "N".
           88 CACHE-FOUND          VALUE "Y".
           88 CACHE-NOT-FOUND      VALUE "N".
+
+      *> Persistent cache record layout (matches CACHE-RECORD)
+       01 WS-CACHE-REC.
+          05 WS-CR-HASH          PIC X(64).
+          05 WS-CR-TIMESTAMP     PIC X(14).
+          05 WS-CR-VALID         PIC X.
+          05 WS-CR-RESPONSE      PIC X(25000).
+
+      *> Cache key hashing and expiry
+       01 WS-CACHE-WORK.
+          05 WS-HASH-ACC         PIC 9(12) VALUE 0.
+          05 WS-HASH-POS         PIC 9(4) VALUE 0.
+          05 WS-HASH-KEY-LEN     PIC 9(4) VALUE 0.
+          05 WS-HASH-ACC-DISP    PIC 9(12) VALUE 0.
+          05 WS-HASH-LEN-DISP    PIC 9(4) VALUE 0.
+          05 WS-CACHE-TTL-DAYS   PIC 9(4) VALUE 7.
+          05 WS-CACHE-DATE-INT   PIC 9(8) VALUE 0.
+          05 WS-CACHE-TODAY-INT  PIC 9(8) VALUE 0.
+          05 WS-CACHE-NL-COUNT   PIC 9(4) VALUE 0.
+          05 WS-CACHE-LOADED     PIC 9(4) VALUE 0.
 
       *>================================================================*
       *> SECTION: ERROR HANDLING (Phase 4)
@@ -389,6 +414,7 @@
            PERFORM VALIDATE-CONFIGURATION.
            PERFORM LOAD-HISTORY.
            PERFORM LOAD-THEME.
+           PERFORM LOAD-RESPONSE-CACHE.
            PERFORM INIT-CONVERSATION-HISTORY.
            PERFORM INIT-MODEL-LIST.
 
@@ -397,7 +423,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.5.0 (Phase 4 - Complete)         \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.5.1 (Phase 4 - Complete)         \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -1033,6 +1059,13 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> Check for cache clear command
+           IF FUNCTION LOWER-CASE(FUNCTION TRIM(WS-PROMPT)) =
+              "cache clear"
+               PERFORM CLEAR-RESPONSE-CACHE
+               EXIT PARAGRAPH
+           END-IF.
+
       *> Check for empty input
            IF FUNCTION TRIM(WS-PROMPT) = SPACES
                EXIT PARAGRAPH
@@ -1069,6 +1102,7 @@
            DISPLAY "  output <file>  - Set output file for responses".
            DISPLAY "  out <file>     - Same as output (shortcut)".
            DISPLAY "  stats          - Show cache and error statistics".
+           DISPLAY "  cache clear    - Empty the persistent response cache".
            DISPLAY "  exit           - Exit the program".
            DISPLAY "  quit           - Exit the program".
            DISPLAY SPACES.
@@ -1306,6 +1340,39 @@
       *>================================================================*
       *> SECTION: RESPONSE CACHING (Phase 4)
       *>================================================================*
+       BUILD-CACHE-KEY.
+      *> Build the lookup key from model + prompt, then reduce it to a
+      *> 64-char fingerprint held in WS-CACHE-HASH.
+      *> WS-CACHE-HASH is scratch storage only - it must never be a table
+      *> slot, or a lookup would compare an entry against itself.
+           MOVE FUNCTION TRIM(WS-PROMPT) TO WS-PROMPT-TRIMMED.
+           MOVE SPACES TO WS-CACHE-KEY.
+           STRING FUNCTION TRIM(WS-MODEL) "|"
+               FUNCTION TRIM(WS-PROMPT-TRIMMED)
+               DELIMITED BY SIZE INTO WS-CACHE-KEY.
+
+      *> Rolling polynomial hash over the whole key so that prompts
+      *> sharing a prefix do not collide.
+           MOVE FUNCTION LENGTH(FUNCTION TRIM(WS-CACHE-KEY))
+               TO WS-HASH-KEY-LEN.
+           MOVE 0 TO WS-HASH-ACC.
+           PERFORM VARYING WS-HASH-POS FROM 1 BY 1
+               UNTIL WS-HASH-POS > WS-HASH-KEY-LEN
+               COMPUTE WS-HASH-ACC = FUNCTION MOD(
+                   (WS-HASH-ACC * 31)
+                   + FUNCTION ORD(WS-CACHE-KEY(WS-HASH-POS:1)),
+                   999999937)
+           END-PERFORM.
+
+      *> Fingerprint = 12-digit hash + 4-digit length + first 48 chars
+           MOVE WS-HASH-ACC TO WS-HASH-ACC-DISP.
+           MOVE WS-HASH-KEY-LEN TO WS-HASH-LEN-DISP.
+           MOVE SPACES TO WS-CACHE-HASH.
+           STRING WS-HASH-ACC-DISP
+                  WS-HASH-LEN-DISP
+                  WS-CACHE-KEY(1:48)
+               DELIMITED BY SIZE INTO WS-CACHE-HASH.
+
        CHECK-RESPONSE-CACHE.
       *> Check if response exists in cache
            MOVE "N" TO WS-CACHE-FOUND.
@@ -1313,13 +1380,7 @@
                EXIT PARAGRAPH
            END-IF.
 
-      *> Build cache key from prompt + model
-           MOVE SPACES TO WS-CACHE-KEY.
-           STRING WS-MODEL "|" WS-PROMPT-TRIMMED
-               DELIMITED BY SIZE INTO WS-CACHE-KEY.
-
-      *> Simple hash: use first 20 chars of key for lookup
-           MOVE FUNCTION TRIM(WS-CACHE-KEY) TO WS-CACHE-PROMPT-HASH(1).
+           PERFORM BUILD-CACHE-KEY.
 
       *> Search cache table
            PERFORM VARYING WS-CACHE-INDEX FROM 1 BY 1
@@ -1327,7 +1388,7 @@
                OR CACHE-FOUND
                IF WS-CACHE-VALID(WS-CACHE-INDEX) = "Y"
                    AND WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX) =
-                       WS-CACHE-PROMPT-HASH(1)
+                       WS-CACHE-HASH
                    MOVE "Y" TO WS-CACHE-FOUND
                    MOVE WS-CACHE-RESPONSE(WS-CACHE-INDEX)
                        TO WS-JSON-EXTRACTED
@@ -1365,14 +1426,121 @@
                MOVE WS-CACHE-COUNT TO WS-CACHE-INDEX
            END-IF.
 
-      *> Store cache entry
-           MOVE FUNCTION TRIM(WS-CACHE-KEY) TO WS-CACHE-PROMPT-HASH(1).
-           MOVE WS-CACHE-PROMPT-HASH(1)
-               TO WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX).
+      *> Store cache entry - WS-CACHE-HASH was set by CHECK-RESPONSE-CACHE
+      *> for this same prompt, so reuse it rather than rebuilding.
+           MOVE WS-CACHE-HASH TO WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX).
            MOVE WS-JSON-EXTRACTED TO WS-CACHE-RESPONSE(WS-CACHE-INDEX).
            MOVE FUNCTION CURRENT-DATE(1:14)
                TO WS-CACHE-TIMESTAMP(WS-CACHE-INDEX).
            MOVE "Y" TO WS-CACHE-VALID(WS-CACHE-INDEX).
+
+      *>================================================================*
+      *> SECTION: CACHE PERSISTENCE
+      *>================================================================*
+       LOAD-RESPONSE-CACHE.
+      *> Repopulate the cache table from disk so hits survive across runs
+           MOVE 0 TO WS-CACHE-COUNT.
+           MOVE 0 TO WS-CACHE-LOADED.
+           IF CACHE-DISABLED
+               EXIT PARAGRAPH
+           END-IF.
+
+           COMPUTE WS-CACHE-TODAY-INT = FUNCTION INTEGER-OF-DATE(
+               FUNCTION NUMVAL(FUNCTION CURRENT-DATE(1:8))).
+
+           OPEN INPUT CACHE-FILE.
+           IF WS-CACHE-STATUS NOT = "00"
+      *> No cache file yet (first run) - start empty, not an error
+               EXIT PARAGRAPH
+           END-IF.
+
+           PERFORM UNTIL WS-CACHE-STATUS NOT = "00"
+               OR WS-CACHE-COUNT >= WS-CACHE-MAX
+               READ CACHE-FILE
+                   AT END
+                       MOVE "99" TO WS-CACHE-STATUS
+                   NOT AT END
+                       MOVE CACHE-RECORD TO WS-CACHE-REC
+                       PERFORM ACCEPT-CACHE-RECORD
+               END-READ
+           END-PERFORM.
+           CLOSE CACHE-FILE.
+
+       ACCEPT-CACHE-RECORD.
+      *> Add one on-disk record to the table if it is valid and fresh
+           IF WS-CR-VALID NOT = "Y"
+               EXIT PARAGRAPH
+           END-IF.
+           IF WS-CR-HASH = SPACES OR WS-CR-RESPONSE = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+           IF WS-CR-TIMESTAMP(1:8) NOT NUMERIC
+               EXIT PARAGRAPH
+           END-IF.
+
+      *> Drop entries older than the TTL
+           COMPUTE WS-CACHE-DATE-INT = FUNCTION INTEGER-OF-DATE(
+               FUNCTION NUMVAL(WS-CR-TIMESTAMP(1:8))).
+           IF WS-CACHE-TODAY-INT - WS-CACHE-DATE-INT > WS-CACHE-TTL-DAYS
+               EXIT PARAGRAPH
+           END-IF.
+
+           ADD 1 TO WS-CACHE-COUNT.
+           MOVE WS-CR-HASH TO WS-CACHE-PROMPT-HASH(WS-CACHE-COUNT).
+           MOVE WS-CR-RESPONSE TO WS-CACHE-RESPONSE(WS-CACHE-COUNT).
+           MOVE WS-CR-TIMESTAMP TO WS-CACHE-TIMESTAMP(WS-CACHE-COUNT).
+           MOVE "Y" TO WS-CACHE-VALID(WS-CACHE-COUNT).
+           ADD 1 TO WS-CACHE-LOADED.
+
+       SAVE-RESPONSE-CACHE.
+      *> Flush the in-memory table back to disk on exit
+           IF CACHE-DISABLED OR WS-CACHE-COUNT = 0
+               EXIT PARAGRAPH
+           END-IF.
+
+           OPEN OUTPUT CACHE-FILE.
+           IF WS-CACHE-STATUS NOT = "00"
+               EXIT PARAGRAPH
+           END-IF.
+
+           PERFORM VARYING WS-CACHE-INDEX FROM 1 BY 1
+               UNTIL WS-CACHE-INDEX > WS-CACHE-COUNT
+               IF WS-CACHE-VALID(WS-CACHE-INDEX) = "Y"
+                   AND WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX) NOT = SPACES
+      *> A literal newline would split the record across two lines
+                   MOVE 0 TO WS-CACHE-NL-COUNT
+                   INSPECT WS-CACHE-RESPONSE(WS-CACHE-INDEX)
+                       TALLYING WS-CACHE-NL-COUNT FOR ALL X"0A"
+                   IF WS-CACHE-NL-COUNT = 0
+                       MOVE WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX)
+                           TO WS-CR-HASH
+                       MOVE WS-CACHE-TIMESTAMP(WS-CACHE-INDEX)
+                           TO WS-CR-TIMESTAMP
+                       MOVE "Y" TO WS-CR-VALID
+                       MOVE WS-CACHE-RESPONSE(WS-CACHE-INDEX)
+                           TO WS-CR-RESPONSE
+                       MOVE WS-CACHE-REC TO CACHE-RECORD
+                       WRITE CACHE-RECORD
+                   END-IF
+               END-IF
+           END-PERFORM.
+           CLOSE CACHE-FILE.
+
+       CLEAR-RESPONSE-CACHE.
+      *> Drop every entry, in memory and on disk
+           MOVE 0 TO WS-CACHE-COUNT.
+           PERFORM VARYING WS-CACHE-INDEX FROM 1 BY 1
+               UNTIL WS-CACHE-INDEX > WS-CACHE-MAX
+               MOVE SPACES TO WS-CACHE-PROMPT-HASH(WS-CACHE-INDEX)
+               MOVE SPACES TO WS-CACHE-RESPONSE(WS-CACHE-INDEX)
+               MOVE SPACES TO WS-CACHE-TIMESTAMP(WS-CACHE-INDEX)
+               MOVE "N" TO WS-CACHE-VALID(WS-CACHE-INDEX)
+           END-PERFORM.
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-cache.dat".
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[32m[OK]\033[0m Response cache cleared'".
+           DISPLAY SPACES.
 
        DISPLAY-RESPONSE-WITH-HIGHLIGHTING.
       *> Clean up escape sequences
@@ -1551,6 +1719,9 @@
            CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-response.json".
 
        CLEANUP-PROGRAM.
+      *> Persist the cache so the next run starts warm
+           PERFORM SAVE-RESPONSE-CACHE.
+
       *> Phase 4: Show cache statistics on exit
            DISPLAY SPACES.
            CALL "SYSTEM" USING
