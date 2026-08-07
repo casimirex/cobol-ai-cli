@@ -98,7 +98,7 @@ question about a different file is a separate entry.
 |---------|-------------|
 | **Retry Logic** | Retries only what can succeed: 429, 5xx and network failures back off exponentially (3 retries, 1s base, 30s max); 401/403/404 fail immediately with the reason |
 | **Response Caching** | Persistent cache of recent responses (20 entries, 7-day TTL) to reduce API calls |
-| **Encrypted Credentials** | Support for system keyring storage (secret-tool on Linux) |
+| **Keyring Credentials** | Reads the API key from the system keyring via `secret-tool`, so it need not sit in plaintext |
 | **Error Handling** | Comprehensive error codes and user-friendly error messages |
 | **Session Statistics** | Cache hit/miss statistics displayed at end of session |
 
@@ -566,7 +566,37 @@ source .env
 
 ## Changelog
 
-### v1.7.0 (HTTP Status Handling) - Latest
+### v1.8.0 (Keyring Credentials) - Latest
+- **`LOAD-ENCRYPTED-CREDENTIALS` now does what the README always said it did.**
+  It was a three-line stub that set a flag to `"N"` and returned, while the
+  banner carried a "(encrypted credentials)" branch on a condition that could
+  never be true.
+- The key is read from the system keyring with `secret-tool` when no key is
+  present in the environment or `.env`. Store it once:
+
+  ```bash
+  secret-tool store --label='COBOL AI CLI' service cobol-ai-cli key api-key
+  ```
+
+  Then remove `AI_OLLAMA_API_KEY` from `.env` — the wrapper exports `.env`, so
+  a key left there still wins.
+- **Both** the COBOL program and `cobol-ai-helper.sh` consult the keyring. The
+  helper is what actually calls `curl`, so a COBOL-only change would have looked
+  correct and changed nothing about the request.
+- Falls back silently when `secret-tool` is not installed.
+- 6 new tests using a fake `secret-tool` on `PATH`, so they are deterministic
+  regardless of what is in the developer's real keyring.
+
+**Precedence**: `AI_OLLAMA_API_KEY` in the environment (including anything
+exported from `.env`) → system keyring → error naming the `secret-tool store`
+command.
+
+> The COBOL side cannot capture command output, so the lookup passes through
+> `/tmp/cobol-ai-key.txt`, created under `umask 077` and deleted immediately
+> after reading. That is a brief single-user-readable window on disk; the bash
+> helper reads the keyring directly with no temp file.
+
+### v1.7.0 (HTTP Status Handling)
 - **The retry loop now knows what went wrong.** `WS-LAST-HTTP-STATUS` was
   declared and never once assigned; `curl -s` ran without `-w '%{http_code}'`
   or `--fail`, so an HTTP 401 wrote its error body to the response file and

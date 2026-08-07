@@ -192,9 +192,39 @@ echo ""
 echo -e "${CYAN}Configuration validation${NC}"
 # ---------------------------------------------------------------------------
 
+# A fake secret-tool on PATH keeps these deterministic regardless of what
+# is actually in the developer's keyring.
+KEYRING_DIR="$TEST_OUTPUT/keyring"
+
+# setup_fake_keyring <value returned by lookup, empty for no entry>
+setup_fake_keyring() {
+    rm -rf "$KEYRING_DIR"
+    mkdir -p "$KEYRING_DIR"
+    cat > "$KEYRING_DIR/secret-tool" <<EOF
+#!/bin/bash
+[ "\$1" = "lookup" ] && printf '%s' '$1'
+exit 0
+EOF
+    chmod +x "$KEYRING_DIR/secret-tool"
+    cat > "$KEYRING_DIR/cobol-ai-helper.sh" <<'HSTUB'
+#!/bin/bash
+echo '200' > /tmp/cobol-ai-status.txt
+echo '{"response":"KEYRING-STUB","done":true}' > /tmp/cobol-ai-response.json
+HSTUB
+    chmod +x "$KEYRING_DIR/cobol-ai-helper.sh"
+}
+
+# run_with_keyring <log> <extra env assignments...> -- runs from KEYRING_DIR
+run_with_keyring() {
+    local log="$1"; shift
+    ( cd "$KEYRING_DIR" && PATH="$KEYRING_DIR:$PATH" \
+        env "$@" timeout 60 "$CLI" "a question" ) > "$log" 2>&1
+}
+
 begin_test "missing-api-key-is-rejected"
 reset_cache
-env -u AI_OLLAMA_API_KEY timeout 30 "$CLI" "hello" > "$CURRENT_LOG" 2>&1
+setup_fake_keyring ""
+run_with_keyring "$CURRENT_LOG" -u AI_OLLAMA_API_KEY
 assert_output_has "$CURRENT_LOG" "AI_OLLAMA_API_KEY not set" && pass_test
 
 begin_test "short-api-key-is-rejected"
@@ -643,6 +673,53 @@ if [[ "$(cat /tmp/cobol-ai-status.txt 2>/dev/null)" == "000" ]]; then
 else
     fail_test "expected status 000 for a refused connection, got '$(cat /tmp/cobol-ai-status.txt 2>/dev/null)'"
 fi
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Credential sources${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "keyring-supplies-key-when-env-is-empty"
+reset_cache
+setup_fake_keyring "keyring-supplied-key-9999"
+run_with_keyring "$CURRENT_LOG" -u AI_OLLAMA_API_KEY
+assert_output_has "$CURRENT_LOG" "encrypted credentials" "KEYRING-STUB" \
+    && pass_test
+
+begin_test "keyring-temp-file-is-cleaned-up"
+if [[ -e /tmp/cobol-ai-key.txt ]]; then
+    fail_test "the key was left behind in /tmp/cobol-ai-key.txt"
+else
+    pass_test
+fi
+
+begin_test "environment-key-wins-over-keyring"
+reset_cache
+setup_fake_keyring "keyring-supplied-key-9999"
+run_with_keyring "$CURRENT_LOG" AI_OLLAMA_API_KEY=env-key-0123456789
+assert_output_has "$CURRENT_LOG" "Configuration loaded successfully" \
+    && assert_output_lacks "$CURRENT_LOG" "encrypted credentials" \
+    && pass_test
+
+begin_test "helper-falls-back-to-keyring"
+setup_fake_keyring "keyring-supplied-key-9999"
+cp "$PROJECT_ROOT/cobol-ai-helper.sh" "$KEYRING_DIR/real-helper.sh"
+( cd "$KEYRING_DIR" && PATH="$KEYRING_DIR:$PATH" \
+    env -u AI_OLLAMA_API_KEY COBOL_AI_HELPER_DRY_RUN=1 \
+    ./real-helper.sh "hi" a-model ) > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "KEY_SOURCE=keyring" && pass_test
+
+begin_test "helper-prefers-environment-over-keyring"
+( cd "$KEYRING_DIR" && PATH="$KEYRING_DIR:$PATH" \
+    env AI_OLLAMA_API_KEY=env-key-0123456789 COBOL_AI_HELPER_DRY_RUN=1 \
+    ./real-helper.sh "hi" a-model ) > "$CURRENT_LOG" 2>&1
+assert_output_has "$CURRENT_LOG" "KEY_SOURCE=environment" && pass_test
+
+begin_test "no-key-anywhere-names-the-keyring-option"
+reset_cache
+setup_fake_keyring ""
+run_with_keyring "$CURRENT_LOG" -u AI_OLLAMA_API_KEY
+assert_output_has "$CURRENT_LOG" "secret-tool store" && pass_test
 
 # ---------------------------------------------------------------------------
 # Summary

@@ -23,9 +23,19 @@ MODEL="${2:-${AI_OLLAMA_DEFAULT_MODEL:-gpt-oss:120b}}"
 TIMEOUT="${AI_OLLAMA_TIMEOUT:-60000}"
 TIMEOUT_SEC=$((TIMEOUT / 1000))
 
+# Fall back to the system keyring when no key is in the environment or
+# .env. Storing it there keeps the key off disk in plaintext:
+#   secret-tool store --label='COBOL AI CLI' service cobol-ai-cli key api-key
+KEY_SOURCE="environment"
+if [ -z "$API_KEY" ] && command -v secret-tool > /dev/null 2>&1; then
+    API_KEY="$(secret-tool lookup service cobol-ai-cli key api-key \
+        2> /dev/null)"
+    [ -n "$API_KEY" ] && KEY_SOURCE="keyring"
+fi
+
 # Check for API key
 if [ -z "$API_KEY" ]; then
-    echo "ERROR: AI_OLLAMA_API_KEY not set"
+    echo "ERROR: AI_OLLAMA_API_KEY not set and no keyring entry found"
     exit 1
 fi
 
@@ -75,6 +85,7 @@ JSON_PAYLOAD="{\"model\":\"$MODEL\",\"prompt\":\"$ESCAPED_PROMPT\",\"stream\":fa
 if [ "${COBOL_AI_HELPER_DRY_RUN:-}" = "1" ]; then
     echo "MODEL=$MODEL"
     echo "BASE_URL=$BASE_URL"
+    echo "KEY_SOURCE=$KEY_SOURCE"
     echo "PAYLOAD=$JSON_PAYLOAD"
     exit 0
 fi

@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.7.0 (HTTP Status Handling)
+      *> Version:     1.8.0 (Keyring Credentials)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -21,7 +21,7 @@
       *>   - Persistent response caching to reduce API calls (Phase 4)
       *>   - File input: ask questions about a file (Phase 3)
       *>   - Output file: append exchanges to a file (Phase 3)
-      *>   - Encrypted credential storage (Phase 4)
+      *>   - Keyring credential storage via secret-tool (Phase 4)
       *>   - Comprehensive error handling (Phase 4)
       *>================================================================*
 
@@ -58,6 +58,9 @@
            SELECT OPTIONAL STATUS-FILE ASSIGN TO WS-STATUS-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-STATUS-FILE-STATUS.
+           SELECT OPTIONAL KEYRING-FILE ASSIGN TO WS-KEYRING-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-KEYRING-FILE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -81,6 +84,8 @@
        01 PROMPT-FILE-LINE      PIC X(12000).
        FD STATUS-FILE.
        01 STATUS-LINE           PIC X(10).
+       FD KEYRING-FILE.
+       01 KEYRING-LINE          PIC X(200).
 
        WORKING-STORAGE SECTION.
 
@@ -96,6 +101,13 @@
              88 CONFIG-LOADED   VALUE "Y".
           05 WS-ENCRYPTED-KEY   PIC X VALUE "N".
              88 KEY-ENCRYPTED   VALUE "Y".
+
+       01 WS-KEYRING.
+          05 WS-KEYRING-FILE-NAME   PIC X(100) VALUE
+              "/tmp/cobol-ai-key.txt".
+          05 WS-KEYRING-FILE-STATUS PIC XX VALUE SPACES.
+          05 WS-KEYRING-VALUE       PIC X(200) VALUE SPACES.
+          05 WS-KEYRING-CMD         PIC X(500) VALUE SPACES.
 
        01 WS-DEFAULTS.
           05 WS-DEFAULT-URL     PIC X(100) VALUE "https://ollama.com".
@@ -477,7 +489,7 @@
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.7.0                             \033[1;36m|\033[0m\n'".
+               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.8.0                             \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -485,18 +497,23 @@
            DISPLAY SPACES.
 
        LOAD-CONFIGURATION.
-      *> Phase 4: Try encrypted credential storage first
-           PERFORM LOAD-ENCRYPTED-CREDENTIALS.
+      *> An explicitly exported key wins; otherwise consult the keyring.
+      *> Note the ./cobol-ai wrapper exports .env, so a key left in .env
+      *> still takes precedence - remove it there to use the keyring.
+           ACCEPT WS-API-KEY FROM ENVIRONMENT "AI_OLLAMA_API_KEY"
 
-      *> Load API key from environment (fallback)
            IF WS-API-KEY = SPACES THEN
-               ACCEPT WS-API-KEY FROM ENVIRONMENT "AI_OLLAMA_API_KEY"
-               IF WS-API-KEY = SPACES THEN
-                   CALL "SYSTEM" USING
-                       "printf '\033[31m[ERR] ERROR: AI_OLLAMA_API_KEY not set\033[0m'"
-                   DISPLAY "      Please set it in .env file or environment"
-                   STOP RUN
-               END-IF
+               PERFORM LOAD-ENCRYPTED-CREDENTIALS
+           END-IF
+
+           IF WS-API-KEY = SPACES THEN
+               CALL "SYSTEM" USING
+                   "printf '\033[31m[ERR] ERROR: AI_OLLAMA_API_KEY not set\033[0m'"
+               DISPLAY "      Set it in .env, in the environment, or store it"
+               DISPLAY "      in the keyring:"
+               DISPLAY "        secret-tool store --label='COBOL AI CLI' \"
+               DISPLAY "          service cobol-ai-cli key api-key"
+               STOP RUN
            END-IF
 
       *> Load base URL from environment
@@ -534,11 +551,45 @@
            DISPLAY SPACES.
 
        LOAD-ENCRYPTED-CREDENTIALS.
-      *> Phase 4: Try to load encrypted credentials using system keyring
-      *> Uses secret-tool (Linux) or security-cli (macOS) if available
+      *> Read the API key from the system keyring via secret-tool.
+      *> Seed it once with:
+      *>   secret-tool store --label='COBOL AI CLI' \
+      *>     service cobol-ai-cli key api-key
            MOVE "N" TO WS-ENCRYPTED-KEY.
-      *> For now, check for encrypted key file as fallback
-           MOVE "N" TO WS-JSON-FOUND.
+           MOVE SPACES TO WS-KEYRING-VALUE.
+
+      *> COBOL cannot capture command output, so the lookup goes through
+      *> a temp file. umask 077 keeps it readable only by this user, and
+      *> it is deleted immediately after reading.
+           MOVE SPACES TO WS-KEYRING-CMD.
+           STRING "command -v secret-tool >/dev/null 2>&1 && "
+                  DELIMITED BY SIZE
+                  "(umask 077; secret-tool lookup service cobol-ai-cli "
+                  DELIMITED BY SIZE
+                  "key api-key > " DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-KEYRING-FILE-NAME) DELIMITED BY SIZE
+                  " 2>/dev/null)" DELIMITED BY SIZE
+               INTO WS-KEYRING-CMD
+           END-STRING.
+           CALL "SYSTEM" USING WS-KEYRING-CMD.
+
+           OPEN INPUT KEYRING-FILE.
+           IF WS-KEYRING-FILE-STATUS = "00"
+              OR WS-KEYRING-FILE-STATUS = "05"
+               READ KEYRING-FILE INTO WS-KEYRING-VALUE
+                   AT END
+                       MOVE SPACES TO WS-KEYRING-VALUE
+               END-READ
+               CLOSE KEYRING-FILE
+           END-IF.
+
+           CALL "SYSTEM" USING "rm -f /tmp/cobol-ai-key.txt".
+
+           IF FUNCTION TRIM(WS-KEYRING-VALUE) NOT = SPACES
+               MOVE FUNCTION TRIM(WS-KEYRING-VALUE) TO WS-API-KEY
+               MOVE "Y" TO WS-ENCRYPTED-KEY
+           END-IF.
+           MOVE SPACES TO WS-KEYRING-VALUE.
 
        VALIDATE-CONFIGURATION.
       *> Phase 4: Comprehensive configuration validation
