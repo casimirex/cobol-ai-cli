@@ -176,6 +176,10 @@ AI_OLLAMA_TIMEOUT=60000
 make all
 ```
 
+This produces `cobol-ai.bin`, which the `./cobol-ai` wrapper runs. The binary is
+a build artifact and is not committed, so a fresh clone must be built before the
+wrapper will work.
+
 ### 4. Verify Installation
 
 ```bash
@@ -345,7 +349,7 @@ cobol-ai-cli/
 ├── .gitignore               # Git ignore patterns
 ├── Makefile                 # Build automation
 ├── cobol-ai                 # Wrapper script (recommended entry point)
-├── cobol-ai.bin             # Compiled COBOL binary (called by wrapper)
+├── cobol-ai.bin             # Compiled binary (built by `make`, not in git)
 ├── cobol-ai-helper.sh       # API helper script
 ├── run-test.sh              # Test runner
 └── roadmap.md               # Project requirements
@@ -455,6 +459,57 @@ For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
   "done": true
 }
 ```
+
+---
+
+## Distribution
+
+### Container
+
+```bash
+make docker                      # or: docker build -t cobol-ai-cli .
+docker run --rm -e AI_OLLAMA_API_KEY=... cobol-ai-cli "What is 2+2?"
+```
+
+Two-stage build: GnuCOBOL compiles in the first stage, the runtime image
+carries only `libcob4`, `curl` and the three executables (~192 MB). It runs as
+an unprivileged `cobol` user. Persist the cache and history across runs with:
+
+```bash
+docker run --rm -v cobol-ai-state:/home/cobol/.local/state \
+    -e AI_OLLAMA_API_KEY=... cobol-ai-cli "your prompt"
+```
+
+### Debian package
+
+```bash
+make deb                         # build/cobol-ai-cli_<version>_<arch>.deb
+sudo dpkg -i build/cobol-ai-cli_*.deb
+```
+
+Installs `cobol-ai`, `cobol-ai.bin` and `cobol-ai-helper.sh` into `/usr/bin`,
+and declares `libcob4` and `curl` as dependencies (`libsecret-tools` is
+recommended, for keyring support).
+
+### Source tarball
+
+```bash
+make dist                        # build/cobol-ai-cli-<version>.tar.gz
+```
+
+Self-contained: unpacking it and running `make all && ./tests/test-runner.sh`
+builds and passes the full suite. It deliberately excludes `.env`.
+
+### Install from a working copy
+
+```bash
+make install                     # honours PREFIX, default /usr/local
+make install PREFIX=$HOME/.local
+```
+
+All four paths install the **wrapper** as the entry point, not the bare binary:
+the wrapper points the program at the helper beside it, which is what lets an
+installed copy work from any directory.
 
 ---
 
@@ -598,7 +653,20 @@ source .env
 
 ## Changelog
 
-### v1.10.2 (Bounds Sweep) - Latest
+### v1.11.0 (Distribution) - Latest
+- **Container image**: two-stage `Dockerfile`; the runtime carries `libcob4`,
+  `curl` and the executables but not the compiler. Runs unprivileged. Verified
+  by a real API call from inside the container.
+- **Debian package**: `make deb` produces an installable `.deb` declaring
+  `libcob4` and `curl`. Verified by unpacking it and running the result from an
+  unrelated directory.
+- **Source tarball**: `make dist`. Verified by extracting it into a clean
+  directory, building, and running the full 73-test suite from it.
+- **`make version`** reads the version from `WS-VERSION`, so packaging and the
+  binary cannot disagree — there is one version string in the project.
+- 6 new packaging tests, including one asserting the tarball never ships `.env`.
+
+### v1.10.2 (Bounds Sweep)
 Swept the codebase for the bug class behind three earlier defects: a hardcoded
 bound that should have referenced a declared size. The scanner was validated
 against planted canaries first, so an empty result means something.

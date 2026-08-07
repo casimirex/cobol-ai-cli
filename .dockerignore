@@ -1,0 +1,11 @@
+.git
+.env
+bin/
+lib/
+test-output/
+screenshots/
+*.bin
+main.c
+main.c.h
+main.c.l.h
+main.i

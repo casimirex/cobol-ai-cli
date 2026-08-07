@@ -44,6 +44,51 @@ $(WRAPPER_BIN): $(MAIN_SRC) $(COPYBOOKS)
 	@echo "Building $(WRAPPER_BIN)..."
 	$(COBC) $(COBC_FLAGS) -o $@ $(MAIN_SRC)
 
+# Version, read from the single constant in the source
+VERSION = $(shell sed -n 's/.*WS-VERSION *PIC X([0-9]*) *VALUE *"\([0-9.]*\)".*/\1/p' \
+	$(COPY_DIR)/ws-config.cpy)
+DEB_ARCH = $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
+DIST_NAME = cobol-ai-cli-$(VERSION)
+
+# Print the version the binaries will report
+.PHONY: version
+version:
+	@echo $(VERSION)
+
+# Source tarball
+.PHONY: dist
+dist: clean
+	@echo "Creating $(DIST_NAME).tar.gz..."
+	@rm -rf build/$(DIST_NAME)
+	@mkdir -p build/$(DIST_NAME)
+	@cp -r src tests packaging Makefile Dockerfile .dockerignore \
+	      cobol-ai cobol-ai-helper.sh run-test.sh README.md .env.example \
+	      build/$(DIST_NAME)/
+	@tar -czf build/$(DIST_NAME).tar.gz -C build $(DIST_NAME)
+	@rm -rf build/$(DIST_NAME)
+	@echo "build/$(DIST_NAME).tar.gz"
+
+# Debian package
+.PHONY: deb
+deb: all
+	@echo "Building cobol-ai-cli_$(VERSION)_$(DEB_ARCH).deb..."
+	@rm -rf build/deb
+	@mkdir -p build/deb/DEBIAN build/deb/usr/bin build/deb/usr/share/doc/cobol-ai-cli
+	@sed -e 's/@VERSION@/$(VERSION)/' -e 's/@ARCH@/$(DEB_ARCH)/' \
+	     packaging/debian/control.in > build/deb/DEBIAN/control
+	@install -m 755 $(WRAPPER_BIN) build/deb/usr/bin/cobol-ai.bin
+	@install -m 755 cobol-ai-helper.sh build/deb/usr/bin/cobol-ai-helper.sh
+	@install -m 755 cobol-ai build/deb/usr/bin/cobol-ai
+	@install -m 644 README.md build/deb/usr/share/doc/cobol-ai-cli/README.md
+	@fakeroot dpkg-deb --build build/deb \
+	    build/cobol-ai-cli_$(VERSION)_$(DEB_ARCH).deb > /dev/null
+	@echo "build/cobol-ai-cli_$(VERSION)_$(DEB_ARCH).deb"
+
+# Container image
+.PHONY: docker
+docker:
+	docker build -t cobol-ai-cli:$(VERSION) -t cobol-ai-cli:latest .
+
 # Clean build artifacts
 .PHONY: clean
 clean:
@@ -51,6 +96,7 @@ clean:
 	rm -rf $(BIN_DIR)/* $(OBJ_DIR)/*
 	rm -f $(WRAPPER_BIN)
 	rm -f main.c main.c.h main.c.l.h main.i
+	rm -rf build
 	rm -f /tmp/cobol-ai-*.json
 
 # Run the program

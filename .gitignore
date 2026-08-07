@@ -4,6 +4,8 @@ DEVELOPMENT-PLAN.md
 roadmap.md
 
 # Build artifacts
+build/
+cobol-ai.bin
 bin/
 lib/*.o
 *.so

@@ -1069,6 +1069,89 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Packaging${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "make-version-matches-the-binary"
+MAKE_V=$(make version 2>/dev/null | tail -1)
+reset_cache
+run_cli_input "$CURRENT_LOG" 'version\nexit\n'
+BIN_V=$(grep -oE 'Version: [0-9.]+' "$CURRENT_LOG" | head -1 | awk '{print $2}')
+if [[ -n "$MAKE_V" && "$MAKE_V" == "$BIN_V" ]]; then
+    pass_test
+else
+    fail_test "make reports '$MAKE_V', the binary reports '$BIN_V'"
+fi
+
+begin_test "deb-builds-and-contains-all-three-files"
+if ! command -v dpkg-deb > /dev/null 2>&1; then
+    echo -e "${YELLOW}SKIP${NC} (dpkg-deb not installed)"
+    TESTS_RUN=$((TESTS_RUN - 1))
+elif ! make deb > "$CURRENT_LOG" 2>&1; then
+    fail_test "make deb failed"
+else
+    DEB=$(ls build/cobol-ai-cli_*.deb 2>/dev/null | head -1)
+    CONTENTS=$(dpkg-deb -c "$DEB" 2>/dev/null)
+    if echo "$CONTENTS" | grep -q 'usr/bin/cobol-ai$' \
+       && echo "$CONTENTS" | grep -q 'usr/bin/cobol-ai.bin' \
+       && echo "$CONTENTS" | grep -q 'usr/bin/cobol-ai-helper.sh'; then
+        pass_test
+    else
+        fail_test "the .deb is missing one of the three executables"
+    fi
+fi
+
+begin_test "deb-declares-its-runtime-dependencies"
+DEB=$(ls build/cobol-ai-cli_*.deb 2>/dev/null | head -1)
+if [[ -n "$DEB" ]] && dpkg-deb -I "$DEB" 2>/dev/null | grep -q 'Depends:.*libcob' \
+   && dpkg-deb -I "$DEB" 2>/dev/null | grep -q 'Depends:.*curl'; then
+    pass_test
+else
+    fail_test "the package does not depend on both libcob and curl"
+fi
+
+begin_test "unpacked-deb-runs-from-any-directory"
+UNPACK="$TEST_OUTPUT/debroot"
+rm -rf "$UNPACK"; mkdir -p "$UNPACK"
+DEB=$(ls build/cobol-ai-cli_*.deb 2>/dev/null | head -1)
+if [[ -z "$DEB" ]]; then
+    fail_test "no .deb to unpack"
+else
+    dpkg-deb -x "$DEB" "$UNPACK"
+    ( cd "$TEST_OUTPUT" && printf 'version\nexit\n' | \
+        env HOME="$UNPACK/home" timeout 60 "$UNPACK/usr/bin/cobol-ai" ) \
+        > "$CURRENT_LOG" 2>&1
+    assert_output_has "$CURRENT_LOG" "Version:" && pass_test
+fi
+
+begin_test "dist-tarball-is-self-contained"
+if ! make dist > "$CURRENT_LOG" 2>&1; then
+    fail_test "make dist failed"
+else
+    TARBALL=$(ls build/cobol-ai-cli-*.tar.gz 2>/dev/null | head -1)
+    LISTING=$(tar -tzf "$TARBALL")
+    MISSING=""
+    for need in src/main.cob src/copybooks/ tests/test-runner.sh Makefile \
+                Dockerfile cobol-ai cobol-ai-helper.sh; do
+        echo "$LISTING" | grep -q "$need" || MISSING="$MISSING $need"
+    done
+    if [[ -n "$MISSING" ]]; then
+        fail_test "tarball is missing:$MISSING"
+    else
+        pass_test
+    fi
+fi
+
+begin_test "dist-tarball-excludes-secrets"
+TARBALL=$(ls build/cobol-ai-cli-*.tar.gz 2>/dev/null | head -1)
+if tar -tzf "$TARBALL" | grep -qE '/\.env$'; then
+    fail_test "the tarball ships a .env file"
+else
+    pass_test
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 reset_cache

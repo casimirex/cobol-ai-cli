@@ -1,0 +1,13 @@
+Package: cobol-ai-cli
+Version: @VERSION@
+Section: utils
+Priority: optional
+Architecture: @ARCH@
+Depends: libcob4, curl
+Recommends: libsecret-tools
+Maintainer: COBOL AI CLI Team <noreply@example.com>
+Description: COBOL command-line interface for the Ollama Cloud API
+ A CLI written in GnuCOBOL that sends prompts to the Ollama Cloud API and
+ displays the responses. Supports one-shot and interactive modes, file
+ input, a persistent response cache, retry with HTTP status classification,
+ and reading the API key from the system keyring.
