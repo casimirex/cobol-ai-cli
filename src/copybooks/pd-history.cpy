@@ -64,7 +64,7 @@
                PERFORM VARYING WS-HISTORY-INDEX FROM 1 BY 1
                    UNTIL WS-HISTORY-INDEX > WS-HISTORY-COUNT
                    DISPLAY "  " WS-HISTORY-INDEX ": "
-                       WS-HIST-TEXT(WS-HISTORY-INDEX)
+                       FUNCTION TRIM(WS-HIST-TEXT(WS-HISTORY-INDEX))
                END-PERFORM
            END-IF.
            DISPLAY SPACES.

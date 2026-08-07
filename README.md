@@ -598,7 +598,23 @@ source .env
 
 ## Changelog
 
-### v1.9.0 (Per-User, Per-Run State Paths) - Latest
+### v1.9.1 (Session Commands) - Latest
+- **Fixed `conversation` never running.** The dispatch compared
+  `WS-COMMAND-TYPE(1:11)` against the 12-character literal `"conversation"`.
+  A reference-modified slice has to match the literal's length, so that test
+  could never be true: the documented command fell through to the prompt
+  handler and was sent to the API as a question, costing a call and returning
+  nonsense. The undocumented `conv` abbreviation happened to work, which is
+  why it went unnoticed. Both now compare the trimmed value.
+- **Fixed padded output.** `history` and `conversation` displayed whole fixed
+  fields, so each entry trailed hundreds of spaces and wrapped the terminal.
+  Conversation timestamps rendered as `2026080714495876`; they now read
+  `2026-08-07 14:50:42`.
+- 11 new tests covering the six commands that had none: `history`, `clear`,
+  `theme`, `models`, `export`, `conversation`. The other five were verified
+  working, not assumed.
+
+### v1.9.0 (Per-User, Per-Run State Paths)
 - **Fixed cross-talk between concurrent sessions.** All 11 runtime files used
   fixed `/tmp` names. `prompt.txt`, `response.json` and `status.txt` are written
   then read back within one request, so two overlapping runs would trade

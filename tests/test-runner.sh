@@ -410,6 +410,8 @@ assert_output_has "$CURRENT_LOG" "STUB-RESPONSE" "Cache Misses: 00001" \
     && pass_test
 
 begin_test "miss-response-is-written-to-cache"
+# (asserts on $CACHE_FILE, not the previous log, so it is unaffected by
+#  begin_test reassigning CURRENT_LOG)
 if grep -qF "STUB-RESPONSE" "$CACHE_FILE" 2>/dev/null; then
     pass_test
 else
@@ -786,6 +788,97 @@ if [[ -n "$LEFTOVER" ]]; then
 else
     pass_test
 fi
+
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Session commands${NC}"
+# ---------------------------------------------------------------------------
+
+begin_test "models-lists-the-catalogue"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'models\nexit\n'
+assert_output_has "$CURRENT_LOG" "Available Models" "llama2:7b" \
+    "deepseek-r1:1.5b" && pass_test
+
+begin_test "theme-without-argument-shows-help"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'theme\nexit\n'
+assert_output_has "$CURRENT_LOG" "Available Themes" "dark" "light" \
+    && pass_test
+
+begin_test "theme-change-persists-to-state"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'theme light\nexit\n'
+if [[ "$(cat "$STATE_DIR/theme.txt" 2>/dev/null | tr -d ' ')" == "light" ]]; then
+    assert_output_has "$CURRENT_LOG" "Theme changed to: light" && pass_test
+else
+    fail_test "theme was not saved to $STATE_DIR/theme.txt"
+fi
+
+begin_test "clear-runs-without-error"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'clear\nexit\n'
+assert_output_lacks "$CURRENT_LOG" "ERR" && pass_test
+
+begin_test "history-records-prompts-not-commands"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'a real question\n\nmodels\nhistory\nexit\n'
+assert_output_has "$CURRENT_LOG" "Command History" "a real question" \
+    && pass_test
+
+PREV_LOG="$CURRENT_LOG"
+begin_test "history-output-is-not-space-padded"
+if [[ ! -f "$PREV_LOG" ]]; then
+    fail_test "previous log $PREV_LOG is missing"
+elif grep -qE 'a real question {10,}' "$PREV_LOG"; then
+    fail_test "history printed the whole padded field"
+else
+    pass_test
+fi
+
+# Regression: the dispatch compared WS-COMMAND-TYPE(1:11) against the
+# 12-character literal "conversation", which can never match, so the
+# documented command was sent to the API as a question instead.
+begin_test "conversation-command-is-dispatched"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'a real question\n\nconversation\nexit\n'
+assert_output_has "$CURRENT_LOG" "Conversation History" \
+    "Q: a real question" "A: STUB-RESPONSE" && pass_test
+
+begin_test "conv-abbreviation-still-works"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'a real question\n\nconv\nexit\n'
+assert_output_has "$CURRENT_LOG" "Conversation History" && pass_test
+
+PREV_LOG="$CURRENT_LOG"
+begin_test "conversation-timestamp-is-readable"
+if [[ ! -f "$PREV_LOG" ]]; then
+    fail_test "previous log $PREV_LOG is missing"
+elif grep -qE '\[0001\] [0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}' \
+    "$PREV_LOG"; then
+    pass_test
+else
+    fail_test "expected a formatted timestamp, got: $(grep -o '\[0001\].*' "$PREV_LOG" | head -1)"
+fi
+
+begin_test "export-writes-the-conversation"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'a real question\n\nexport\nexit\n'
+if [[ -f "$STATE_DIR/export.txt" ]]; then
+    assert_output_has "$STATE_DIR/export.txt" "a real question" \
+        && pass_test
+else
+    fail_test "export.txt was not created in $STATE_DIR"
+fi
+
+begin_test "export-with-no-conversation-is-refused"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'export\nexit\n'
+assert_output_has "$CURRENT_LOG" "No conversation to export" && pass_test
 
 # ---------------------------------------------------------------------------
 # Summary

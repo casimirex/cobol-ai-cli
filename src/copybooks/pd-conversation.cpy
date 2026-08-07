@@ -43,10 +43,17 @@
                PERFORM VARYING WS-CONV-INDEX FROM 1 BY 1
                    UNTIL WS-CONV-INDEX > WS-CONV-COUNT
                    DISPLAY SPACES
+                   MOVE WS-CONV-TIMESTAMP(WS-CONV-INDEX)
+                       TO WS-TIME-VALUE
                    DISPLAY "  [" WS-CONV-INDEX "] "
-                       WS-CONV-TIMESTAMP(WS-CONV-INDEX)
-                   DISPLAY "      Q: " WS-CONV-PROMPT(WS-CONV-INDEX)
-                   DISPLAY "      A: " WS-CONV-RESPONSE(WS-CONV-INDEX)
+                       WS-TIME-VALUE(1:4) "-" WS-TIME-VALUE(5:2) "-"
+                       WS-TIME-VALUE(7:2) " "
+                       WS-TIME-VALUE(9:2) ":" WS-TIME-VALUE(11:2) ":"
+                       WS-TIME-VALUE(13:2)
+                   DISPLAY "      Q: "
+                       FUNCTION TRIM(WS-CONV-PROMPT(WS-CONV-INDEX))
+                   DISPLAY "      A: "
+                       FUNCTION TRIM(WS-CONV-RESPONSE(WS-CONV-INDEX))
                END-PERFORM
            END-IF.
            DISPLAY SPACES.
@@ -65,7 +72,8 @@
            END-IF.
 
            PERFORM EXPORT-AS-TEXT.
-           DISPLAY "Conversation exported to: " WS-EXPORT-FILE-NAME.
+           DISPLAY "Conversation exported to: "
+               FUNCTION TRIM(WS-EXPORT-FILE-NAME).
            DISPLAY SPACES.
 
        EXPORT-AS-TEXT.

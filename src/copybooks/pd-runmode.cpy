@@ -158,8 +158,12 @@
            END-IF.
 
       *> Check for conversation command (Phase 2 - Show Conversation)
-           IF WS-COMMAND-TYPE(1:5) = "conv" OR
-              WS-COMMAND-TYPE(1:11) = "conversation"
+      *> Compare the trimmed value: a reference-modified slice must match
+      *> the literal's length exactly, and (1:11) never could equal a
+      *> 12-character word, so "conversation" was falling through to the
+      *> prompt handler and being sent to the API as a question.
+           IF FUNCTION TRIM(WS-COMMAND-TYPE) = "conv" OR
+              FUNCTION TRIM(WS-COMMAND-TYPE) = "conversation"
                PERFORM SHOW-CONVERSATION
                EXIT PARAGRAPH
            END-IF.
