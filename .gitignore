@@ -9,6 +9,12 @@ lib/*.o
 *.so
 *.dll
 
+# GnuCOBOL intermediate C output (cobc -fsyntax-only leaves these behind)
+*.c
+*.c.h
+*.c.l.h
+*.i
+
 # Temporary files
 *.tmp
 *.response.json

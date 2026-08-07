@@ -1,9 +1,10 @@
 # COBOL AI CLI - Makefile
-# Build automation for single-file architecture
+# Build automation - main.cob plus copybooks in src/copybooks
 
 # Compiler settings
 COBC = cobc
-COBC_FLAGS = -x -free
+COPY_DIR = src/copybooks
+COBC_FLAGS = -x -free -I $(COPY_DIR)
 
 # Directories
 SRC_DIR = src
@@ -14,6 +15,7 @@ DOC_DIR = docs
 
 # Source files
 MAIN_SRC = $(SRC_DIR)/main.cob
+COPYBOOKS = $(wildcard $(COPY_DIR)/*.cpy)
 
 # Main executable
 EXECUTABLE = $(BIN_DIR)/cobol-ai-cli
@@ -32,12 +34,12 @@ dirs:
 	@mkdir -p $(BIN_DIR) $(OBJ_DIR)
 
 # Compile main program
-$(EXECUTABLE): $(MAIN_SRC) | dirs
+$(EXECUTABLE): $(MAIN_SRC) $(COPYBOOKS) | dirs
 	@echo "Building $(EXECUTABLE)..."
 	$(COBC) $(COBC_FLAGS) -o $@ $(MAIN_SRC)
 
 # Compile the wrapper's binary from the same source
-$(WRAPPER_BIN): $(MAIN_SRC)
+$(WRAPPER_BIN): $(MAIN_SRC) $(COPYBOOKS)
 	@echo "Building $(WRAPPER_BIN)..."
 	$(COBC) $(COBC_FLAGS) -o $@ $(MAIN_SRC)
 
@@ -47,6 +49,7 @@ clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf $(BIN_DIR)/* $(OBJ_DIR)/*
 	rm -f $(WRAPPER_BIN)
+	rm -f main.c main.c.h main.c.l.h main.i
 	rm -f /tmp/cobol-ai-*.json
 
 # Run the program
@@ -78,11 +81,11 @@ check-deps:
 .PHONY: lint
 lint:
 	@echo "Linting $(MAIN_SRC)..."
-	$(COBC) -fsyntax-only $(MAIN_SRC)
+	$(COBC) -fsyntax-only -free -I $(COPY_DIR) $(MAIN_SRC)
 
 # Build with debug symbols
 .PHONY: debug
-debug: COBC_FLAGS = -x -free -g
+debug: COBC_FLAGS = -x -free -I $(COPY_DIR) -g
 debug: all
 	@echo "Built with debug symbols."
 

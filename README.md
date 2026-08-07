@@ -318,7 +318,26 @@ cobol-ai-cli/
 ├── examples/                 # Example files
 │   └── example-prompts.txt  # Sample prompts
 ├── src/                      # Source code
-│   └── main.cob             # Main COBOL program (single-file architecture)
+│   ├── main.cob             # Program skeleton: FDs, file control, entry point
+│   └── copybooks/           # Data and paragraphs, one file per concern
+│       ├── ws-config.cpy    # Credentials, keyring, defaults, retry state
+│       ├── ws-cache.cpy     # Cache table, record layout, hashing state
+│       ├── ws-errors.cpy    # Error state and error code constants
+│       ├── ws-http.cpy      # Request/response buffers, JSON cursors
+│       ├── ws-io.cpy        # Prompt, attached file, pipe, output file
+│       ├── ws-ui.cpy        # Colours, banner text, spinner, highlighting
+│       ├── ws-state.cpy     # Run mode, history, conversation, models
+│       ├── pd-config.cpy    # Loading and validating configuration
+│       ├── pd-errors.cpy    # Logging and reporting errors
+│       ├── pd-runmode.cpy   # Pipe/argument detection, the prompt loop
+│       ├── pd-http.cpy      # Payload, retry loop, status, JSON parsing
+│       ├── pd-cache.cpy     # Cache lookup, storage and persistence
+│       ├── pd-fileio.cpy    # File input and the output file
+│       ├── pd-history.cpy   # Command history
+│       ├── pd-conversation.cpy  # Conversation recording and export
+│       ├── pd-models.cpy    # Model selection and statistics
+│       ├── pd-ui.cpy        # Banner, themes, help, response rendering
+│       └── pd-cleanup.cpy   # Shutdown and session summary
 ├── tests/                    # Test files
 │   └── test-runner.sh       # Test script
 ├── .env                      # Environment config
@@ -332,15 +351,28 @@ cobol-ai-cli/
 └── roadmap.md               # Project requirements
 ```
 
-**Note on Architecture:** This project uses a single-file modular architecture. While copybooks (`.cpy` files) are a common COBOL pattern for code reuse, GnuCOBOL's free-format mode has limited copybook support. Instead, the code is organized into clearly marked **sections** within `main.cob`:
+**Note on Architecture:** The program is one compilation unit assembled from
+copybooks. `main.cob` holds only the skeleton — file control entries, FDs and
+`MAIN-PROCEDURE` — and `COPY` pulls in the rest from `src/copybooks`, split by
+concern: `ws-*.cpy` for data definitions, `pd-*.cpy` for paragraphs.
 
-- **CONFIGURATION** - Environment variable loading and validation
-- **HTTP CLIENT** - API request handling
-- **JSON PARSING** - Request building and response parsing
-- **INPUT/OUTPUT** - User interaction handling
-- **PROGRAM STATE** - Execution flow control
+Copybooks are textual includes, so this is file-level organisation rather than
+compilation-unit isolation. Separate units would mean `CALL` between programs
+with shared state passed through `LINKAGE`; with working storage this widely
+shared, that is a rewrite rather than a refactor, and it buys little for a
+single-binary CLI.
 
-This approach provides clean separation of concerns while maintaining compatibility.
+Two ordering rules matter:
+
+- `MAIN-PROCEDURE` must stay the first paragraph in the `PROCEDURE DIVISION`,
+  because control falls into whatever comes first. Its `STOP RUN` prevents
+  execution running on into the copied paragraphs.
+- Everything else is reached by `PERFORM`, and there is no `PERFORM ... THRU`
+  or `GO TO` anywhere in the program, so the order of the `COPY` statements
+  carries no meaning.
+
+Build with `make`, which supplies `-I src/copybooks`. A bare
+`cobc -x -free src/main.cob` will fail to resolve the copybooks.
 
 ---
 
@@ -389,14 +421,14 @@ This approach provides clean separation of concerns while maintaining compatibil
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Main Program | `main.cob` | Entry point, orchestration |
-| Configuration | `main.cob` | Load settings from `.env` |
-| HTTP Client | `cobol-ai-helper.sh` | Make API requests via curl |
-| JSON Parser | `main.cob` | Build/parse JSON payloads |
-| Response Formatter | `main.cob` | Clean and display AI responses |
-| Input Handler | `main.cob` | Manage user prompts |
-
-**Single-File Design:** All COBOL modules are organized into clearly documented sections within `main.cob`, making it easy to navigate while maintaining separation of concerns.
+| Entry point | `src/main.cob` | FDs, file control, `MAIN-PROCEDURE` |
+| Configuration | `pd-config.cpy` | Load and validate settings, keyring lookup |
+| HTTP client | `cobol-ai-helper.sh` | Make API requests via curl |
+| Retry / status | `pd-http.cpy` | Backoff, HTTP status classification, JSON parsing |
+| Response cache | `pd-cache.cpy` | Key hashing, lookup, persistence |
+| File I/O | `pd-fileio.cpy` | Attached file input, output file |
+| Response formatter | `pd-ui.cpy` | Clean and display AI responses |
+| Input handler | `pd-runmode.cpy` | Prompt loop and command dispatch |
 
 For detailed architecture, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
