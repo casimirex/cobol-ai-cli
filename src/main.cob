@@ -5,7 +5,7 @@
       *> COBOL-AI-CLI - Main Program
       *>
       *> Description: AI Agent CLI for Ollama Cloud API Integration
-      *> Version:     1.9.1 (Session Commands)
+      *> Version:     1.10.0 (Backoff, Error Log, Install)
       *> Author:      COBOL AI CLI Team
       *> License:     MIT
       *>
@@ -88,6 +88,12 @@
            SELECT OPTIONAL KEYRING-FILE ASSIGN TO WS-KEYRING-FILE-NAME
                ORGANIZATION IS LINE SEQUENTIAL
                FILE STATUS IS WS-KEYRING-FILE-STATUS.
+           SELECT OPTIONAL ERROR-FILE ASSIGN TO WS-ERROR-FILE-NAME
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-ERROR-FILE-STATUS.
+           SELECT OPTIONAL HELPER-PROBE ASSIGN TO WS-HELPER-SCRIPT
+               ORGANIZATION IS LINE SEQUENTIAL
+               FILE STATUS IS WS-HELPER-PROBE-STATUS.
 
        DATA DIVISION.
        FILE SECTION.
@@ -113,6 +119,10 @@
        01 STATUS-LINE           PIC X(10).
        FD KEYRING-FILE.
        01 KEYRING-LINE          PIC X(200).
+       FD ERROR-FILE.
+       01 ERROR-LINE            PIC X(400).
+       FD HELPER-PROBE.
+       01 HELPER-PROBE-LINE     PIC X(80).
 
        WORKING-STORAGE SECTION.
 

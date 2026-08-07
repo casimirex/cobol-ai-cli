@@ -50,7 +50,9 @@
                       "' COBOL_AI_STATUS_FILE='" DELIMITED BY SIZE
                       FUNCTION TRIM(WS-STATUS-FILE-NAME)
                           DELIMITED BY SIZE
-                      "' ./cobol-ai-helper.sh --prompt-file '"
+                      "' " DELIMITED BY SIZE
+                      FUNCTION TRIM(WS-HELPER-SCRIPT) DELIMITED BY SIZE
+                      " --prompt-file '"
                       DELIMITED BY SIZE
                       FUNCTION TRIM(WS-PROMPT-FILE-NAME)
                           DELIMITED BY SIZE
@@ -173,8 +175,11 @@
        WAIT-RETRY-DELAY.
       *> Wait for retry delay (simplified - uses shell sleep)
            MOVE SPACES TO WS-TEMP-STRING
+      *> WS-CURRENT-RETRY is already 1 on the first retry, so the
+      *> exponent is offset to give the documented 1s, 2s, 4s schedule
+      *> rather than 2s, 4s, 8s.
            COMPUTE WS-RETRY-DELAY = WS-BASE-DELAY *
-               (2 ** WS-CURRENT-RETRY)
+               (2 ** (WS-CURRENT-RETRY - 1))
            IF WS-RETRY-DELAY > WS-MAX-DELAY
                MOVE WS-MAX-DELAY TO WS-RETRY-DELAY
            END-IF
@@ -183,8 +188,13 @@
                MOVE 1 TO WS-TEMP-POS
            END-IF
            MOVE WS-TEMP-POS TO WS-TEMP-STRING
+      *> STRING overwrites from position 1 but leaves the rest of the
+      *> field intact. Without this clear, "sleep N" was followed by the
+      *> tail of the previous API command, including an unbalanced quote,
+      *> so the shell rejected it and the backoff never actually waited.
+           MOVE SPACES TO WS-HELPER-CMD
            STRING "sleep " DELIMITED BY SIZE
-                  WS-TEMP-STRING DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-TEMP-STRING) DELIMITED BY SIZE
                INTO WS-HELPER-CMD
            END-STRING
            CALL "SYSTEM" USING WS-HELPER-CMD.

@@ -6,20 +6,34 @@
       *>================================================================*
 
        LOG-ERROR.
-      *> Phase 4: Log error to file for debugging
-           OPEN OUTPUT HISTORY-FILE.
-           IF WS-HISTORY-STATUS = "00"
-               STRING "ERROR [" FUNCTION CURRENT-DATE(1:19) "] "
-                      DELIMITED BY SIZE INTO HISTORY-LINE
-               WRITE HISTORY-LINE
-               STRING "Code: " WS-LAST-ERROR-CODE " - " WS-LAST-ERROR-MSG
-                      DELIMITED BY SIZE INTO HISTORY-LINE
-               WRITE HISTORY-LINE
-               MOVE SPACES TO HISTORY-LINE
-               WRITE HISTORY-LINE
-               CLOSE HISTORY-FILE
-           END-IF.
+      *> Append to a dedicated error log. This used to OPEN OUTPUT the
+      *> command-history file, which truncates: a single API error wiped
+      *> the user's saved history and replaced it with error text.
            ADD 1 TO WS-ERROR-COUNT.
+           IF FUNCTION TRIM(WS-ERROR-FILE-NAME) = SPACES
+               EXIT PARAGRAPH
+           END-IF.
+
+           OPEN EXTEND ERROR-FILE.
+           IF WS-ERROR-FILE-STATUS NOT = "00"
+              AND WS-ERROR-FILE-STATUS NOT = "05"
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE WS-LAST-ERROR-CODE TO WS-ERROR-CODE-DISP.
+           MOVE SPACES TO ERROR-LINE.
+           STRING "[" FUNCTION CURRENT-DATE(1:4) "-"
+                  FUNCTION CURRENT-DATE(5:2) "-"
+                  FUNCTION CURRENT-DATE(7:2) " "
+                  FUNCTION CURRENT-DATE(9:2) ":"
+                  FUNCTION CURRENT-DATE(11:2) ":"
+                  FUNCTION CURRENT-DATE(13:2) "] code="
+                  WS-ERROR-CODE-DISP " "
+                  FUNCTION TRIM(WS-LAST-ERROR-MSG)
+                  DELIMITED BY SIZE INTO ERROR-LINE
+           END-STRING.
+           WRITE ERROR-LINE.
+           CLOSE ERROR-FILE.
 
        DISPLAY-ERROR-MESSAGE.
       *> Phase 4: Display user-friendly error message

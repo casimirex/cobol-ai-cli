@@ -54,10 +54,37 @@
            STRING "/tmp/cobol-ai-" FUNCTION TRIM(WS-RUN-ID) "-"
                DELIMITED BY SIZE INTO WS-TMP-PREFIX.
 
+           PERFORM RESOLVE-HELPER.
+
       *> Persistent state files
            PERFORM BUILD-STATE-PATHS.
       *> Per-request scratch files
            PERFORM BUILD-SCRATCH-PATHS.
+
+       RESOLVE-HELPER.
+      *> The helper used to be invoked as a bare "./cobol-ai-helper.sh",
+      *> which only works when the process happens to be running from the
+      *> project directory. An installed binary failed every request.
+      *> Order: explicit override, then alongside the CWD, then $PATH.
+           MOVE SPACES TO WS-PATH-ENV.
+           ACCEPT WS-PATH-ENV FROM ENVIRONMENT "COBOL_AI_HELPER".
+           IF WS-PATH-ENV NOT = SPACES
+               MOVE FUNCTION TRIM(WS-PATH-ENV) TO WS-HELPER-SCRIPT
+               EXIT PARAGRAPH
+           END-IF.
+
+           MOVE "./cobol-ai-helper.sh" TO WS-HELPER-SCRIPT.
+           OPEN INPUT HELPER-PROBE.
+           IF WS-HELPER-PROBE-STATUS = "00"
+               CLOSE HELPER-PROBE
+               EXIT PARAGRAPH
+           END-IF.
+      *> Status 05 means the OPTIONAL file was absent - fall back to a
+      *> bare name so the shell resolves it on $PATH.
+           IF WS-HELPER-PROBE-STATUS = "05"
+               CLOSE HELPER-PROBE
+           END-IF.
+           MOVE "cobol-ai-helper.sh" TO WS-HELPER-SCRIPT.
 
        BUILD-STATE-PATHS.
            MOVE SPACES TO WS-CACHE-FILE.
@@ -72,6 +99,9 @@
            MOVE SPACES TO WS-CONV-FILE-NAME.
            STRING FUNCTION TRIM(WS-STATE-DIR) "/conversation.json"
                DELIMITED BY SIZE INTO WS-CONV-FILE-NAME.
+           MOVE SPACES TO WS-ERROR-FILE-NAME.
+           STRING FUNCTION TRIM(WS-STATE-DIR) "/errors.log"
+               DELIMITED BY SIZE INTO WS-ERROR-FILE-NAME.
 
        BUILD-SCRATCH-PATHS.
            MOVE SPACES TO WS-RESPONSE-FILE.

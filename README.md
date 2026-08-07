@@ -598,7 +598,33 @@ source .env
 
 ## Changelog
 
-### v1.9.1 (Session Commands) - Latest
+### v1.10.0 (Backoff, Error Log, Installation) - Latest
+- **Exponential backoff never ran.** `WAIT-RETRY-DELAY` built its command with
+  `STRING "sleep " ... INTO WS-HELPER-CMD` without clearing the field first.
+  `STRING` overwrites from position 1 and leaves the rest intact, so the command
+  was `sleep N` followed by the tail of the previous API call — including an
+  unbalanced quote. The shell rejected the whole thing with
+  `Syntax error: Unterminated quoted string` and **no wait ever happened**.
+  Measured: three retries took 0 seconds. Against a real 429 that means
+  hammering the endpoint as fast as the loop runs, which is precisely what
+  backoff exists to prevent. Now measured at 7s for the documented 1+2+4.
+- **The retry schedule was also off by one.** `2 ** WS-CURRENT-RETRY` with the
+  counter already at 1 gave 2s/4s/8s, not the documented 1s/2s/4s.
+- **A single API error destroyed your command history.** `LOG-ERROR` did
+  `OPEN OUTPUT` on the *command-history* file — `OPEN OUTPUT` truncates — so one
+  401 replaced the whole history with error text. Errors now append to their own
+  `errors.log` in the state directory, with a readable timestamp and the code.
+- **`make install` produced a broken installation.** The helper was invoked as
+  `./cobol-ai-helper.sh`, relative to the working directory, so an installed
+  binary failed every request with `sh: 1: ./cobol-ai-helper.sh: not found`.
+  The helper is now resolved once at startup: `$COBOL_AI_HELPER` if set, else
+  `./cobol-ai-helper.sh` if present, else via `$PATH`. `make install` ships the
+  wrapper, the binary and the helper together, honours `PREFIX`, and the wrapper
+  points the program at the helper beside it.
+- 7 new tests. The backoff one asserts on **elapsed time**, not call count —
+  the existing retry tests counted attempts and so could never have caught this.
+
+### v1.9.1 (Session Commands)
 - **Fixed `conversation` never running.** The dispatch compared
   `WS-COMMAND-TYPE(1:11)` against the 12-character literal `"conversation"`.
   A reference-modified slice has to match the literal's length, so that test

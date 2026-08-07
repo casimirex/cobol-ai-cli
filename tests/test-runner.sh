@@ -881,6 +881,105 @@ run_cli_input "$CURRENT_LOG" 'export\nexit\n'
 assert_output_has "$CURRENT_LOG" "No conversation to export" && pass_test
 
 # ---------------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}Retry backoff and installation${NC}"
+# ---------------------------------------------------------------------------
+
+# Regression: WAIT-RETRY-DELAY built "sleep N" with STRING INTO
+# WS-HELPER-CMD without clearing it first. STRING overwrites from position
+# 1 and leaves the rest, so the command carried the tail of the previous
+# API call including an unbalanced quote. The shell rejected it and the
+# backoff never waited. Counting attempts cannot catch this - only timing.
+begin_test "backoff-actually-sleeps"
+reset_cache
+BACKOFF_DIR="$TEST_OUTPUT/backoff"
+rm -rf "$BACKOFF_DIR"; mkdir -p "$BACKOFF_DIR"
+cat > "$BACKOFF_DIR/cobol-ai-helper.sh" <<'BSTUB'
+#!/bin/bash
+echo '429' > "$COBOL_AI_STATUS_FILE"
+echo '{"error":"rate limited"}' > "$COBOL_AI_RESPONSE_FILE"
+exit 1
+BSTUB
+chmod +x "$BACKOFF_DIR/cobol-ai-helper.sh"
+BACKOFF_START=$(date +%s)
+( cd "$BACKOFF_DIR" && timeout 90 "$CLI" "q" ) > "$CURRENT_LOG" 2>&1
+BACKOFF_ELAPSED=$(( $(date +%s) - BACKOFF_START ))
+if [[ "$BACKOFF_ELAPSED" -lt 6 ]]; then
+    fail_test "3 retries took ${BACKOFF_ELAPSED}s; the 1+2+4 backoff did not run"
+elif [[ "$BACKOFF_ELAPSED" -gt 20 ]]; then
+    fail_test "3 retries took ${BACKOFF_ELAPSED}s, far longer than the 7s schedule"
+else
+    pass_test
+fi
+
+begin_test "retry-emits-no-shell-errors"
+PREV_LOG="$TEST_OUTPUT/backoff-actually-sleeps.log"
+if grep -qE 'Unterminated|Syntax error' "$PREV_LOG" 2>/dev/null; then
+    fail_test "the retry path produced a malformed shell command"
+else
+    pass_test
+fi
+
+# Regression: LOG-ERROR did OPEN OUTPUT on the command-history file, which
+# truncates. One API error replaced the user's whole history with error text.
+begin_test "errors-do-not-destroy-command-history"
+reset_cache
+setup_stub_helper
+run_stubbed "$TEST_OUTPUT/hist-seed.log" 'remembered question\n\nexit\n'
+ERR_DIR="$TEST_OUTPUT/errstub"
+rm -rf "$ERR_DIR"; mkdir -p "$ERR_DIR"
+cat > "$ERR_DIR/cobol-ai-helper.sh" <<'ESTUB'
+#!/bin/bash
+echo '401' > "$COBOL_AI_STATUS_FILE"
+echo '{"error":"bad key"}' > "$COBOL_AI_RESPONSE_FILE"
+exit 1
+ESTUB
+chmod +x "$ERR_DIR/cobol-ai-helper.sh"
+( cd "$ERR_DIR" && printf 'doomed question\n\nexit\n' | timeout 60 "$CLI" ) \
+    > "$CURRENT_LOG" 2>&1
+if grep -qF "remembered question" "$STATE_DIR/history.txt" 2>/dev/null; then
+    pass_test
+else
+    fail_test "history was destroyed by an error: $(cat "$STATE_DIR/history.txt" 2>/dev/null | head -2)"
+fi
+
+begin_test "errors-go-to-their-own-log"
+if [[ -f "$STATE_DIR/errors.log" ]] \
+   && grep -qF "401" "$STATE_DIR/errors.log"; then
+    pass_test
+else
+    fail_test "expected the 401 in $STATE_DIR/errors.log"
+fi
+
+# Regression: the helper was invoked as "./cobol-ai-helper.sh", relative to
+# the working directory, so an installed binary failed every request.
+begin_test "install-produces-a-working-entry-point"
+INST="$TEST_OUTPUT/prefix"
+rm -rf "$INST"
+if ! make install PREFIX="$INST" > "$CURRENT_LOG" 2>&1; then
+    fail_test "make install failed"
+elif [[ ! -x "$INST/bin/cobol-ai" || ! -x "$INST/bin/cobol-ai.bin" \
+        || ! -x "$INST/bin/cobol-ai-helper.sh" ]]; then
+    fail_test "install did not place all three files in $INST/bin"
+else
+    pass_test
+fi
+
+begin_test "installed-cli-finds-helper-from-any-directory"
+ELSEWHERE="$TEST_OUTPUT/elsewhere"
+rm -rf "$ELSEWHERE"; mkdir -p "$ELSEWHERE"
+reset_cache
+( cd "$ELSEWHERE" && env -u COBOL_AI_HELPER timeout 60 \
+    "$INST/bin/cobol-ai" "hello" ) > "$CURRENT_LOG" 2>&1
+assert_output_lacks "$CURRENT_LOG" "cobol-ai-helper.sh: not found" && pass_test
+
+begin_test "raw-binary-falls-back-to-PATH"
+reset_cache
+( cd "$ELSEWHERE" && env -u COBOL_AI_HELPER PATH="$INST/bin:$PATH" timeout 60 \
+    "$INST/bin/cobol-ai.bin" "hello" ) > "$CURRENT_LOG" 2>&1
+assert_output_lacks "$CURRENT_LOG" "cobol-ai-helper.sh: not found" && pass_test
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 reset_cache

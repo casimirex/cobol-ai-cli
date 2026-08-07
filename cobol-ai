@@ -16,5 +16,10 @@ fi
 # sessions cannot overwrite each other's prompt or response.
 export COBOL_AI_RUN_ID="$$"
 
+# Tell the program where the helper is. Without this it looks for
+# ./cobol-ai-helper.sh relative to the current directory, which fails for
+# an installed copy invoked from anywhere else.
+export COBOL_AI_HELPER="${SCRIPT_DIR}/cobol-ai-helper.sh"
+
 # Run the COBOL program with all arguments
 exec "${SCRIPT_DIR}/cobol-ai.bin" "$@"

@@ -15,7 +15,8 @@
        01 WS-FILE-STATUS        PIC XX VALUE SPACES.
        01 WS-TIME-VALUE         PIC X(14) VALUE SPACES.
 
-       01 WS-HELPER-SCRIPT      PIC X(100) VALUE "./cobol-ai-helper.sh".
+       01 WS-HELPER-SCRIPT      PIC X(200) VALUE SPACES.
+       01 WS-HELPER-PROBE-STATUS PIC XX VALUE SPACES.
        01 WS-HELPER-CMD         PIC X(5000) VALUE SPACES.
 
       *>================================================================*

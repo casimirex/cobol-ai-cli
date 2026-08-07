@@ -3,6 +3,7 @@
 
 # Compiler settings
 COBC = cobc
+PREFIX ?= /usr/local
 COPY_DIR = src/copybooks
 COBC_FLAGS = -x -free -I $(COPY_DIR)
 
@@ -92,17 +93,25 @@ debug: all
 # Install system-wide
 .PHONY: install
 install: all
-	@echo "Installing to /usr/local/bin..."
-	@cp $(EXECUTABLE) /usr/local/bin/
-	@cp cobol-ai-helper.sh /usr/local/bin/
-	@echo "Installation complete."
+	@echo "Installing to $(PREFIX)/bin..."
+	@install -d $(PREFIX)/bin
+	@install -m 755 $(WRAPPER_BIN) $(PREFIX)/bin/cobol-ai.bin
+	@install -m 755 cobol-ai-helper.sh $(PREFIX)/bin/cobol-ai-helper.sh
+	@install -m 755 cobol-ai $(PREFIX)/bin/cobol-ai
+	@echo "Installed. Run: cobol-ai \"your prompt\""
+	@echo "The wrapper resolves the helper next to itself, so it works"
+	@echo "from any directory. Set AI_OLLAMA_API_KEY or store the key:"
+	@echo "  secret-tool store --label='COBOL AI CLI' \\"
+	@echo "    service cobol-ai-cli key api-key"
 
 # Uninstall
 .PHONY: uninstall
 uninstall:
-	@echo "Uninstalling from /usr/local/bin..."
-	@rm -f /usr/local/bin/cobol-ai-cli
-	@rm -f /usr/local/bin/cobol-ai-helper.sh
+	@echo "Uninstalling from $(PREFIX)/bin..."
+	@rm -f $(PREFIX)/bin/cobol-ai
+	@rm -f $(PREFIX)/bin/cobol-ai.bin
+	@rm -f $(PREFIX)/bin/cobol-ai-helper.sh
+	@rm -f $(PREFIX)/bin/cobol-ai-cli
 	@echo "Uninstallation complete."
 
 # Show architecture
