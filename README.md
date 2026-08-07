@@ -598,7 +598,33 @@ source .env
 
 ## Changelog
 
-### v1.10.1 (Model Selection) - Latest
+### v1.10.2 (Bounds Sweep) - Latest
+Swept the codebase for the bug class behind three earlier defects: a hardcoded
+bound that should have referenced a declared size. The scanner was validated
+against planted canaries first, so an empty result means something.
+
+Clean:
+- No loop bound compares against a numeric literal.
+- No reference-modified slice mismatches its literal's length.
+- All four `OCCURS` tables agree with their `*-MAX` constants.
+- No literal slice exceeds its field's `PIC` size.
+- `CACHE-RECORD X(25079)` matches the sum of its field widths exactly.
+
+Found and fixed:
+- **`version` was declared but dispatched nowhere.** `CMD-VERSION` existed as an
+  88-level with no handler, so typing `version` was sent to the API as a
+  question. It now reports version, model, endpoint, state directory and the
+  resolved helper path.
+- **The banner had been reporting v1.8.0 for four releases.** After the copybook
+  refactor the banner moved to `pd-ui.cpy`, while the version-bump edits kept
+  targeting `main.cob` — so the running program advertised a version four
+  releases stale. Version now lives in one constant, `WS-VERSION`, that both the
+  banner and the `version` command read.
+- 3 new tests, including one asserting the banner and the `version` command
+  agree, and one checking every declared command constant is dispatched
+  somewhere — the check that would have caught `version` and `conversation`.
+
+### v1.10.1 (Model Selection)
 - **Fixed an advertised model that could not be selected.** The validation loop
   ran `UNTIL WS-JSON-I > 5` against a 6-entry table, so `llama3:2b` was listed by
   `models` and rejected by `model` as unknown. The bound is now tied to

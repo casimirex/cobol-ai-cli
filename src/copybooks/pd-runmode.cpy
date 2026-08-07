@@ -102,6 +102,12 @@
                EXIT PARAGRAPH
            END-IF.
 
+      *> Check for version command
+           IF CMD-VERSION
+               PERFORM SHOW-VERSION
+               EXIT PARAGRAPH
+           END-IF.
+
       *> Check for help command
            IF CMD-HELP
                PERFORM DISPLAY-HELP

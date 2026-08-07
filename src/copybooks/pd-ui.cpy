@@ -9,8 +9,15 @@
       *> Display colorful banner with theme colors
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
-           CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m              COBOL AI CLI v1.8.0                             \033[1;36m|\033[0m\n'".
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "printf '\033[1;36m|\033[0m              COBOL AI CLI v"
+                  DELIMITED BY SIZE
+                  FUNCTION TRIM(WS-VERSION) DELIMITED BY SIZE
+                  "                        \033[1;36m|\033[0m\n'"
+                  DELIMITED BY SIZE
+               INTO WS-PATH-CMD
+           END-STRING
+           CALL "SYSTEM" USING WS-PATH-CMD.
            CALL "SYSTEM" USING
                "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
            CALL "SYSTEM" USING
@@ -103,6 +110,7 @@
            DISPLAY "  stats          - Show cache and error statistics".
            DISPLAY "  cache clear    - Empty the persistent response cache".
            DISPLAY "  file <path> [question] - Ask about a file's contents".
+           DISPLAY "  version        - Show the version and build info".
            DISPLAY "  exit           - Exit the program".
            DISPLAY "  quit           - Exit the program".
            DISPLAY SPACES.
@@ -299,3 +307,16 @@
                    END-IF
                END-IF
            END-PERFORM.
+
+       SHOW-VERSION.
+      *> CMD-VERSION was declared but dispatched nowhere, so typing
+      *> `version` was sent to the API as a question.
+           DISPLAY SPACES.
+           CALL "SYSTEM" USING
+               "printf '\033[1;33m=== COBOL AI CLI ===\033[0m\n'".
+           DISPLAY "  Version: " FUNCTION TRIM(WS-VERSION).
+           DISPLAY "  Model:   " FUNCTION TRIM(WS-MODEL).
+           DISPLAY "  Endpoint: " FUNCTION TRIM(WS-BASE-URL).
+           DISPLAY "  State:   " FUNCTION TRIM(WS-STATE-DIR).
+           DISPLAY "  Helper:  " FUNCTION TRIM(WS-HELPER-SCRIPT).
+           DISPLAY SPACES.

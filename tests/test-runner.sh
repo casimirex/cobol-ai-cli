@@ -1030,6 +1030,44 @@ else
     fail_test "the crafted name was neither rejected nor reported"
 fi
 
+# Regression: CMD-VERSION was declared but dispatched nowhere, so typing
+# `version` was sent to the API as a question.
+begin_test "version-command-is-dispatched"
+reset_cache
+setup_stub_helper
+run_stubbed "$CURRENT_LOG" 'version\nexit\n'
+if grep -qF "STUB-RESPONSE" "$CURRENT_LOG"; then
+    fail_test "'version' was sent to the API instead of being handled"
+else
+    assert_output_has "$CURRENT_LOG" "Version:" "Endpoint:" && pass_test
+fi
+
+begin_test "banner-and-version-agree"
+reset_cache
+run_cli_input "$CURRENT_LOG" 'version\nexit\n'
+BANNER_V=$(grep -oE 'COBOL AI CLI v[0-9.]+' "$CURRENT_LOG" | head -1 | sed 's/.*v//')
+REPORT_V=$(grep -oE 'Version: [0-9.]+' "$CURRENT_LOG" | head -1 | awk '{print $2}')
+if [[ -n "$BANNER_V" && "$BANNER_V" == "$REPORT_V" ]]; then
+    pass_test
+else
+    fail_test "banner says '$BANNER_V', version command says '$REPORT_V'"
+fi
+
+# Every declared command constant must actually be dispatched somewhere.
+begin_test "all-command-constants-are-dispatched"
+UNDISPATCHED=""
+for c in $(grep -oE '88 (CMD-[A-Z-]+)' src/copybooks/ws-io.cpy | awk '{print $2}'); do
+    word=$(grep -E "88 $c " src/copybooks/ws-io.cpy | sed 's/.*VALUE "//; s/".*//')
+    grep -rqE "\\b$c\\b" src/copybooks/pd-*.cpy \
+        || grep -rqE "\"$word ?\"" src/copybooks/pd-runmode.cpy \
+        || UNDISPATCHED="$UNDISPATCHED $c"
+done
+if [[ -n "$UNDISPATCHED" ]]; then
+    fail_test "declared but never dispatched:$UNDISPATCHED"
+else
+    pass_test
+fi
+
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------

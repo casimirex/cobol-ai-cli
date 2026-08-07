@@ -8,6 +8,10 @@
       *>================================================================*
       *> SECTION: CONFIGURATION
       *>================================================================*
+      *> Single source of truth for the version: the banner and the
+      *> `version` command both read it, so a release touches one line.
+       01 WS-VERSION            PIC X(12) VALUE "1.10.2".
+
        01 WS-CONFIG.
           05 WS-API-KEY         PIC X(200) VALUE SPACES.
           05 WS-BASE-URL        PIC X(100) VALUE "https://ollama.com".
