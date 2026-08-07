@@ -48,7 +48,7 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 
 ## Features
 
-### Phase 1 Features (v1.2.0) ✨ COMPLETE
+### Phase 1 — Interface (v1.2.0)
 | Feature | Description |
 |---------|-------------|
 | **Loading Spinner** | Animated spinner during API requests (`\|/-` animation) |
@@ -61,7 +61,7 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **Enhanced Colored UI** | Beautiful terminal colors for all output |
 | **Status Indicators** | Visual feedback with `[SEND]`, `[RECV]`, `[OK]`, `[ERR]` icons |
 
-### Phase 2 Features (v1.3.0) ✨ NEW
+### Phase 2 — Conversation and models (v1.3.0)
 | Feature | Description |
 |---------|-------------|
 | **Conversation History** | View full conversation with timestamps using `conversation` command |
@@ -69,12 +69,12 @@ COBOL AI CLI is a command-line interface that enables COBOL applications to inte
 | **Model Switching** | Switch between AI models mid-session with `model <name>` command |
 | **Model Listing** | See available models with `models` command |
 
-### Phase 3 Features (v1.4.0) ✨ NEW
+### Phase 3 — Pipes (v1.4.0)
 | Feature | Description |
 |---------|-------------|
 | **Pipe Support** | Accept input from stdin: `echo "prompt" | ./cobol-ai` |
 
-### File Input (v1.6.0) ✨ NEW
+### Phase 3 — File input and output (v1.6.0)
 
 Attach a file's contents to a question, in either mode:
 
@@ -93,7 +93,7 @@ Contents are capped at 10,000 characters; longer files are truncated with a
 warning. The attached file is part of the cache key, so asking the same
 question about a different file is a separate entry.
 
-### Phase 4 Features (v1.5.0) ✨ COMPLETE
+### Phase 4 — Reliability (v1.5.0, corrected through v1.10.x)
 | Feature | Description |
 |---------|-------------|
 | **Retry Logic** | Retries only what can succeed: 429, 5xx and network failures back off exponentially (3 retries, 1s base, 30s max); 401/403/404 fail immediately with the reason |
@@ -139,6 +139,17 @@ question about a different file is a separate entry.
 ### Optional
 
 - **Ollama Account** - Get your API key from [ollama.com/settings/keys](https://ollama.com/settings/keys)
+
+- **secret-tool** - To keep the API key out of plaintext `.env`
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install libsecret-tools
+
+  # Fedora/RHEL
+  sudo dnf install libsecret
+  ```
+
+- **Docker** / **dpkg-deb** - Only for `make docker` and `make deb`
 
 ---
 
@@ -208,21 +219,33 @@ source .env
 
 **Sample Output:**
 ```
-========================================
-       COBOL AI CLI v1.0.0
-       Ollama Cloud Integration
-========================================
++======================================================================+
+|              COBOL AI CLI v1.11.1                                    |
+|                  Powered by Ollama Cloud API                         |
++======================================================================+
 
-Model: gpt-oss:120b
+[OK] Configuration loaded successfully
+    Model: gpt-oss:120b
+    Theme: dark
 
-Sending request to Ollama API...
-Response received (00292 bytes)
---------------------------------------------------
-AI: 2 + 2 = 4.
---------------------------------------------------
+[SEND] Sending request to Ollama API...
+| Loading... /
+[RECV] Response received (00303 bytes)
+[OK] Request completed!
 
-Thank you for using COBOL AI CLI!
+======================================================================
+>>> AI Response:
+2 + 2 = 4.
+======================================================================
+
+Session Statistics:
+  Cache Hits:   00000
+  Cache Misses: 00001
+  Hit Rate:     00000%
 ```
+
+(Colour is stripped above; the real output is coloured, and the spinner
+animates in place rather than printing a frame per line.)
 
 ---
 
@@ -234,7 +257,7 @@ Thank you for using COBOL AI CLI!
 ### Interactive Mode - Conversation
 ![Interactive Mode](screenshots/Screenshot%20from%202026-07-09%2012-31-12.png)
 
-### Phase 4 Features - Retry & Cache Statistics
+### Retry and cache statistics
 ![Phase 4 Features](screenshots/Pasted%20image.png)
 
 ---
@@ -262,6 +285,7 @@ Run without arguments for an interactive session:
 | Command | Description |
 |---------|-------------|
 | `help` | Show available commands |
+| `version` | Show version, model, endpoint, state directory and helper path |
 | `history` | Show command history |
 | `clear` | Clear the screen |
 | `theme` | Change color theme (dark/light) |
@@ -285,7 +309,12 @@ For direct API calls without the CLI:
 
 ```bash
 ./cobol-ai-helper.sh "Your prompt here"
-# Outputs: /tmp/cobol-ai-response.json
+# Writes the response to $COBOL_AI_RESPONSE_FILE, defaulting to
+# /tmp/cobol-ai-response.json, and the HTTP status to $COBOL_AI_STATUS_FILE.
+# The CLI passes per-run paths so concurrent sessions cannot collide.
+
+./cobol-ai-helper.sh --prompt-file ./prompt.txt gpt-oss:120b   # long prompts
+COBOL_AI_HELPER_DRY_RUN=1 ./cobol-ai-helper.sh "hi"            # resolve config only
 ```
 
 ---
@@ -498,7 +527,7 @@ make dist                        # build/cobol-ai-cli-<version>.tar.gz
 ```
 
 Self-contained: unpacking it and running `make all && ./tests/test-runner.sh`
-builds and passes the full suite. It deliberately excludes `.env`.
+builds and passes the full test suite. It deliberately excludes `.env`.
 
 ### Install from a working copy
 
@@ -522,10 +551,12 @@ make test
 ```
 
 The suite runs **offline and costs nothing**. Because the response cache is
-file-backed, seeding `/tmp/cobol-ai-cache.dat` lets the program answer from
-cache without calling the API, and cache-miss paths are covered by running the
-CLI from a directory containing a stub `cobol-ai-helper.sh`. No API key is
-needed — the tests export a fake one and point the base URL at a dead port.
+file-backed, seeding it lets the program answer from cache without calling the
+API, and cache-miss paths are covered by running the CLI from a directory
+containing a stub `cobol-ai-helper.sh`. No API key is needed — the tests export
+a fake one and point the base URL at a dead port. State is redirected into
+`test-output/` via `XDG_STATE_HOME`, so a run never touches your real cache,
+history or theme.
 
 ### Manual smoke test
 
@@ -653,7 +684,30 @@ source .env
 
 ## Changelog
 
-### v1.11.0 (Distribution) - Latest
+### v1.11.1 (Documentation Accuracy) - Latest
+- **The "Sample Output" block was fabricated.** It showed a `v1.0.0` banner and
+  an `AI:` response prefix that appears nowhere in the source — the program has
+  printed a boxed banner and `>>> AI Response:` for many versions. Replaced with
+  output captured from an actual run.
+- **Fixed banner misalignment.** Making the version a constant in v1.10.2 left a
+  fixed pad sized for the old string, so the title line was 12 characters short
+  of the box. The subtitle line was one short, and had been since the beginning.
+  Both are now composed into fixed-width `WS-BANNER-*` fields — which also puts
+  two long-dead declarations to use — so the box stays square for any version.
+- **`make dist` no longer wipes your build.** It depended on `clean`, which
+  deleted `cobol-ai.bin`; since the artifact stopped being tracked in v1.11.0
+  that left the working copy without a runnable binary. `dist` copies an
+  explicit file list, so it never needed `clean`.
+- Feature sections no longer advertise v1.3.0 and v1.4.0 work as "✨ NEW".
+- Corrected the helper-script and testing sections, which still documented fixed
+  `/tmp` paths after v1.9.0 made them per-run; documented `secret-tool` as an
+  optional prerequisite; added `version` to the command table.
+
+Verified rather than assumed: every `make` target the README names exists, every
+command in its table is dispatched, and the prompt limit, cache size, TTL, file
+cap and retry count all match the source.
+
+### v1.11.0 (Distribution)
 - **Container image**: two-stage `Dockerfile`; the runtime carries `libcob4`,
   `curl` and the executables but not the compiler. Runs unprivileged. Verified
   by a real API call from inside the container.
@@ -661,7 +715,7 @@ source .env
   `libcob4` and `curl`. Verified by unpacking it and running the result from an
   unrelated directory.
 - **Source tarball**: `make dist`. Verified by extracting it into a clean
-  directory, building, and running the full 73-test suite from it.
+  directory, building, and running the full test suite from it.
 - **`make version`** reads the version from `WS-VERSION`, so packaging and the
   binary cannot disagree — there is one version string in the project.
 - 6 new packaging tests, including one asserting the tarball never ships `.env`.

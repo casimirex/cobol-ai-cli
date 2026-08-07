@@ -10,7 +10,7 @@
       *>================================================================*
       *> Single source of truth for the version: the banner and the
       *> `version` command both read it, so a release touches one line.
-       01 WS-VERSION            PIC X(12) VALUE "1.11.0".
+       01 WS-VERSION            PIC X(12) VALUE "1.11.1".
 
        01 WS-CONFIG.
           05 WS-API-KEY         PIC X(200) VALUE SPACES.

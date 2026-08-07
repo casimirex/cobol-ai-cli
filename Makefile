@@ -57,7 +57,7 @@ version:
 
 # Source tarball
 .PHONY: dist
-dist: clean
+dist:
 	@echo "Creating $(DIST_NAME).tar.gz..."
 	@rm -rf build/$(DIST_NAME)
 	@mkdir -p build/$(DIST_NAME)

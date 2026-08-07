@@ -9,17 +9,30 @@
       *> Display colorful banner with theme colors
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
-           MOVE SPACES TO WS-PATH-CMD
-           STRING "printf '\033[1;36m|\033[0m              COBOL AI CLI v"
-                  DELIMITED BY SIZE
+      *> Compose into a fixed-width field so the box stays aligned
+      *> whatever length the version string happens to be.
+           MOVE SPACES TO WS-BANNER-TITLE
+           STRING "              COBOL AI CLI v" DELIMITED BY SIZE
                   FUNCTION TRIM(WS-VERSION) DELIMITED BY SIZE
-                  "                        \033[1;36m|\033[0m\n'"
-                  DELIMITED BY SIZE
+               INTO WS-BANNER-TITLE
+           END-STRING
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "printf '\033[1;36m|\033[0m" DELIMITED BY SIZE
+                  WS-BANNER-TITLE DELIMITED BY SIZE
+                  "\033[1;36m|\033[0m\n'" DELIMITED BY SIZE
                INTO WS-PATH-CMD
            END-STRING
            CALL "SYSTEM" USING WS-PATH-CMD.
-           CALL "SYSTEM" USING
-               "printf '\033[1;36m|\033[0m                  Powered by Ollama Cloud API                        \033[1;36m|\033[0m\n'".
+           MOVE SPACES TO WS-BANNER-SUB
+           MOVE "                  Powered by Ollama Cloud API"
+               TO WS-BANNER-SUB
+           MOVE SPACES TO WS-PATH-CMD
+           STRING "printf '\033[1;36m|\033[0m" DELIMITED BY SIZE
+                  WS-BANNER-SUB DELIMITED BY SIZE
+                  "\033[1;36m|\033[0m\n'" DELIMITED BY SIZE
+               INTO WS-PATH-CMD
+           END-STRING
+           CALL "SYSTEM" USING WS-PATH-CMD.
            CALL "SYSTEM" USING
                "printf '\033[1;36m+======================================================================+\033[0m\n'".
            DISPLAY SPACES.
